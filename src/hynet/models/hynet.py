@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
-from .harmonization_network import HarmNet
+from .harmnet import HarmNet
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -56,16 +56,23 @@ class GatedFusionBlock(nn.Module):
     def forward(self, x1, x2):
         if x1.shape != x2.shape:
              x2 = TF.resize(x2, size=x1.shape[2:])
-             
+
         cat = torch.cat((x1, x2), dim=1)
         alpha = self.gate_conv(cat)
-        
+
         return (x1 * alpha) + (x2 * (1 - alpha))
 
 class AsymmetricGatedYNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=1, features=[64, 128, 256, 512]):
+    """Dual-encoder Y-Net. The defaults are the published model; the options are used for the ablation studies:
+    `use_attention=False` feeds the raw skips unfiltered, `fusion="concat"` concatenates the two streams instead of
+    gating them (the default `fusion="gated"` learns a pixel-wise weight map)."""
+    def __init__(self, in_channels=3, out_channels=1, features=[64, 128, 256, 512], use_attention=True, fusion="gated"):
         super(AsymmetricGatedYNet, self).__init__()
-        
+        assert fusion in ("gated", "concat")
+        self.use_attention = use_attention
+        self.gated = fusion == "gated"
+        streams = 1 if self.gated else 2  # channel multiplier of the fused features
+
         self.encoder1_layers = nn.ModuleList()
         self.encoder2_layers = nn.ModuleList()
         self.pool = nn.MaxPool2d(2, 2)
@@ -76,22 +83,25 @@ class AsymmetricGatedYNet(nn.Module):
             self.encoder2_layers.append(DoubleConv(curr, f))
             curr = f
 
-        self.bottleneck_fusion = GatedFusionBlock(features[-1])
-        self.bottleneck = DoubleConv(features[-1], features[-1] * 2)
+        if self.gated:
+            self.bottleneck_fusion = GatedFusionBlock(features[-1])
+        self.bottleneck = DoubleConv(features[-1] * streams, features[-1] * 2)
 
         self.ups = nn.ModuleList()
         self.attentions = nn.ModuleList()
         self.fusion_blocks = nn.ModuleList()
         self.dec_convs = nn.ModuleList()
-        
+
         reversed_features = features[::-1]
-        bottleneck_out = features[-1] * 2 
-        
+        bottleneck_out = features[-1] * 2
+
         for f in reversed_features:
             self.ups.append(nn.ConvTranspose2d(bottleneck_out, f, 2, 2))
-            self.attentions.append(AttentionBlock(F_g=f, F_l=f, F_int=f//2))
-            self.fusion_blocks.append(GatedFusionBlock(f))
-            self.dec_convs.append(DoubleConv(f * 2, f))
+            if use_attention:
+                self.attentions.append(AttentionBlock(F_g=f, F_l=f, F_int=f//2))
+            if self.gated:
+                self.fusion_blocks.append(GatedFusionBlock(f))
+            self.dec_convs.append(DoubleConv(f * streams + f, f))
             bottleneck_out = f
 
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
@@ -102,11 +112,11 @@ class AsymmetricGatedYNet(nn.Module):
 
         for layer in self.encoder1_layers:
             x1 = layer(x1); skips1.append(x1); x1 = self.pool(x1)
-            
+
         for layer in self.encoder2_layers:
             x2 = layer(x2); skips2.append(x2); x2 = self.pool(x2)
 
-        fused_bn = self.bottleneck_fusion(x1, x2)
+        fused_bn = self.bottleneck_fusion(x1, x2) if self.gated else torch.cat((x1, x2), dim=1)
         x = self.bottleneck(fused_bn)
         skips1 = skips1[::-1]
         skips2 = skips2[::-1]
@@ -115,25 +125,43 @@ class AsymmetricGatedYNet(nn.Module):
             g = self.ups[idx](x)
             s1 = skips1[idx]
             s2 = skips2[idx]
-            
+
             if g.shape != s1.shape: g = TF.resize(g, size=s1.shape[2:])
 
-            s2_filtered = self.attentions[idx](g=g, x=s2)
-            fused_skip = self.fusion_blocks[idx](s1, s2_filtered)
+            s2_filtered = self.attentions[idx](g=g, x=s2) if self.use_attention else s2
+            fused_skip = self.fusion_blocks[idx](s1, s2_filtered) if self.gated else torch.cat((s1, s2_filtered), dim=1)
             concat = torch.cat((fused_skip, g), dim=1)
             x = self.dec_convs[idx](concat)
 
         return self.final_conv(x)
 
-class HAGYNet(nn.Module):
-    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device, weights_path: str) -> None:
-        super(HAGYNet, self).__init__()
-        self.harmnet = HarmNet(input_shape, hidden_units, input_shape).to(device)
-        self.ynet = AsymmetricGatedYNet(input_shape, output_shape).to(device)
-      
-        self.harmnet.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
-            
+class HYNet(nn.Module):
+    """HarmNet followed by the Asymmetric Gated Y-Net (the harmonized and the raw image feed the two streams).
+
+    Ablation options (defaults = published model): `harmonize=False` skips HarmNet and gives the raw image to both
+    streams, `freeze_harmnet=True` keeps HarmNet fixed (static pre-processing instead of end-to-end training),
+    `use_attention`/`fusion` are forwarded to the Y-Net. `weights_path=None` leaves HarmNet randomly initialized.
+    """
+    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device, weights_path: str,
+                 harmonize: bool = True, freeze_harmnet: bool = False, use_attention: bool = True, fusion: str = "gated") -> None:
+        super(HYNet, self).__init__()
+        self.harmonize = harmonize
+        self.freeze_harmnet = freeze_harmnet
+        if harmonize:
+            self.harmnet = HarmNet(input_shape, hidden_units, input_shape).to(device)
+            if weights_path is not None:
+                self.harmnet.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
+            if freeze_harmnet:
+                self.harmnet.requires_grad_(False)
+        self.ynet = AsymmetricGatedYNet(input_shape, output_shape, use_attention=use_attention, fusion=fusion).to(device)
+
     def forward(self, x):
-        proc = self.harmnet(x)
+        if not self.harmonize:
+            proc = x
+        elif self.freeze_harmnet:
+            with torch.no_grad():
+                proc = self.harmnet(x)
+        else:
+            proc = self.harmnet(x)
         out = self.ynet(proc, x)
         return out
