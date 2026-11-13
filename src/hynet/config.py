@@ -55,8 +55,6 @@ def get_args(add_arguments=None):
     parser.add_argument("--dataset_path", type=str, default="data/DatasetOrganoidsSplitted_70_15_15", help="Path where is located dataset")
     parser.add_argument("--processed_dataset_path", type=str, default="data/ProcessedDatasetOrganoidsSplitted_70_15_15", help="Path where is located the processed dataset used to train HarmNet")
     parser.add_argument("--harm_input_folder", type=str, default="true_images", help="Sub-folder of each processed split with the raw HarmNet inputs")
-    parser.add_argument("--harm_domain_adv", type=float, default=0.0, help="HarmNet training on a pooled dataset: weight of the domain-adversarial loss that makes the HarmNet output independent of the dataset of origin (0 = off; see hynet.adversarial)")
-    parser.add_argument("--harm_moment_match", type=float, default=0.0, help="HarmNet training on a pooled dataset: weight of the penalty on the differences between the datasets in the statistics of the output (quantiles, mean, std, gradient, Laplacian); 0 = off")
     parser.add_argument("--harm_target_folder", type=str, default="images", help="Sub-folder of each processed split with the HarmNet reference targets")
 
     # Model Architecture

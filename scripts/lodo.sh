@@ -13,7 +13,7 @@
 #              AUGMENT=false (true: random photometric augmentation of the training images of the segmentation model), SCALE=0 (F > 1: random zoom of the training images by a factor in [1/F, F]), AUGMENT_RANGE=default (wide: ranges that contain the whole robustness sweep),
 #              CONSIST=0, CONSIST_HARM=0 (weights of the unsupervised consistency between two photometric views of the same image: prediction and harmonized image),
 #              CONSIST_TARGET=false (true: half of those images are the unlabeled test images of the held-out dataset, masks never read), CONSIST_PAIRS=2,
-#              HARM_ADV=0 and HARM_MATCH=0 (weights of the domain-adversarial loss and of the domain-statistics penalty of the HarmNet training; MODEL=harmnet trains and stops there; use a different ROOT),
+#              MODEL=harmnet trains HarmNet and stops there (use a different ROOT),
 #              NORM=batch (group: GroupNorm in the segmentation model; use a different ROOT), ADABN=false (true: re-estimate the BatchNorm statistics on the test images before predicting; EVAL_ROOT=<dir> for the output)
 set -euo pipefail
 DOMAIN=$1
@@ -31,8 +31,6 @@ CONSIST=${CONSIST:-0}
 CONSIST_HARM=${CONSIST_HARM:-0}
 CONSIST_TARGET=${CONSIST_TARGET:-false}
 CONSIST_PAIRS=${CONSIST_PAIRS:-2}
-HARM_ADV=${HARM_ADV:-0}
-HARM_MATCH=${HARM_MATCH:-0}
 ADABN=${ADABN:-false}
 # the dual-stream models do not fit a batch of 4 in 12 GB at the very peak: same batch, accumulated over MICRO chunks
 case $MODEL in
@@ -51,7 +49,7 @@ mkdir -p "$RUNS/harmnet/fold0" "$RUNS/$MODEL/fold0"
 case $MODEL in
   hynet|hynet_frozen|hynet_nogate|harm_unet|harmnet)
     if [ ! -f "$RUNS/harmnet/fold0/DONE" ]; then
-      $RUN hynet-train --harmnet true --hynet false $TRAIN --harm_domain_adv $HARM_ADV --harm_moment_match $HARM_MATCH > "$RUNS/harmnet/fold0/train.log"
+      $RUN hynet-train --harmnet true --hynet false $TRAIN >"$RUNS/harmnet/fold0/train.log"
       touch "$RUNS/harmnet/fold0/DONE"
     fi;;
 esac

@@ -44,7 +44,7 @@ src/hynet/
 │   ├── baselines.py   # U-Net, Attention U-Net, HarmNet + U-Net
 │   └── factory.py     # build_model(name): the models compared in the paper
 └── cli/               # train, test, evaluate, compare, make_folds, make_targets, predict, benchmark, prepare_external, prepare_pool, robustness, postproc
-scripts/               # experiment drivers (lodo, finetune_external, robustness, postproc), summaries, HarmNet visualization
+scripts/               # experiment drivers (lodo, robustness, postproc), summaries, HarmNet visualization
 folds/                 # cross-validation folds (versioned, so that results can be reproduced)
 docs/                  # experiment protocols (experiments.md)
 tests/                 # unit tests (pytest)

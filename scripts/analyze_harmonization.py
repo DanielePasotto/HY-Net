@@ -13,10 +13,26 @@ import json
 import os
 import numpy as np
 import torch
+import torch.nn as nn
 from hynet import data
 from hynet.models.harmnet import HarmNet
 
 DOMAINS = ("ours", "orgaseg", "organoid")
+
+class DomainDiscriminator(nn.Module):
+    """Small CNN with global mean/max pooling: it sees intensity statistics and texture, not the image layout."""
+    def __init__(self, n_domains, width=32):
+        super().__init__()
+        c = [1, width, width * 2, width * 4, width * 4]
+        layers = []
+        for i in range(4):
+            layers += [nn.Conv2d(c[i], c[i + 1], 5, stride=2, padding=2), nn.LeakyReLU(0.2, inplace=True)]
+        self.features = nn.Sequential(*layers)
+        self.head = nn.Linear(c[-1] * 2, n_domains)
+
+    def forward(self, x):
+        f = self.features(x)
+        return self.head(torch.cat([f.mean((2, 3)), f.amax((2, 3))], dim=1))
 
 def domain_of(name):
     return name.split("_", 1)[1].split("-", 1)[0]
@@ -61,7 +77,6 @@ def f_ratio(values, labels):
 def probe_accuracy(images, labels, device, epochs=40, repeats=3):
     """Accuracy on held-out images (30%) of a CNN trained from scratch to guess the dataset; mean and std over `repeats` random splits."""
     import torch.nn.functional as F
-    from hynet.adversarial import DomainDiscriminator
     X = torch.tensor(np.stack(images))[:, None].float()
     y = torch.tensor([DOMAINS.index(l) for l in labels])
     accs = []

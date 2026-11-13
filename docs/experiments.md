@@ -56,7 +56,7 @@ is fine-tuned on *N* images of the external training wells (`--init_weights`, `-
 
 ```bash
 uv run --extra cu128 hynet-make-folds --dataset_path data/external/organoid --folds_k 4 --folds_out folds/external_organoid_cv4.json
-scripts/finetune_external.sh organoid hynet pretrained   # also: ynet_raw, unet; `scratch` trains the same N images from random weights
+# fine-tuning: hynet-train --init_weights <weights of fold j> --n_train N --subset_seed R on the external fold (the driver scripts/finetune_external.sh was removed; it is in commit 8cf9ff0)
 uv run --extra cu128 hynet-compare --folds_file folds/external_organoid_cv4.json --dataset_path data/external/organoid --models hynet ynet_raw unet \
     --eval_dir outputs/ft/organoid/pretrained/n8_r0 --extra_eval_dirs outputs/ft/organoid/pretrained/n8_r1 --replicates_label "random draws"
 ```

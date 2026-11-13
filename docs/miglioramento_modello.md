@@ -170,7 +170,15 @@ Da fare a fine corsa: tabella completa con `python3 scripts/summarize_improvemen
 - I confronti con CAMPEOD sono a un solo seme.
 - Il lavoro è tutto non committato nel repository.
 
-## 10. File creati o modificati in questo ciclo
+## 10. Codice rimosso (pulizia del 2026-11-13)
+
+Il codice degli esperimenti chiusi è stato tolto dal ramo `wip/model-improvement`; resta recuperabile dal commit 8cf9ff0 (`git show 8cf9ff0:<percorso>`).
+- Armonizzazione avversaria e a momenti: `src/hynet/adversarial.py`, `tests/test_adversarial.py`, flag `--harm_domain_adv` e `--harm_moment_match`, variabili `HARM_ADV`/`HARM_MATCH` di `lodo.sh`. La classe `DomainDiscriminator` (usata dalla sonda CNN) è stata spostata in `scripts/analyze_harmonization.py`.
+- Armonizzazione spettrale: `src/hynet/spectral.py`, `tests/test_spectral.py`, `scripts/spectral_pool.py`, `slurm/spectral_pool.sbatch`.
+- Driver di esperimenti chiusi: `scripts/adabn.sh`, `scripts/summarize_adabn.py`, `scripts/finetune_external.sh`, `scripts/summarize_finetune.py`. Restano `src/hynet/adabn.py` e il flag `--adabn` di `hynet-evaluate`, e i flag `--init_weights`/`--n_train` del fine-tuning.
+- Le sezioni 4 e 5 descrivono quei tentativi: per riprodurli serve tornare al commit 8cf9ff0.
+
+## 11. File creati o modificati in questo ciclo
 
 - Codice: `src/hynet/scale.py`, `src/hynet/consistency.py`, `src/hynet/spectral.py`, `src/hynet/adversarial.py`, `src/hynet/models/harmnet.py` (`ResidualHarmNet`), `src/hynet/models/hynet.py` (`forward_proc`, `residual_harm`), `src/hynet/models/factory.py` (`hynet_res`), `src/hynet/engine.py`, `src/hynet/config.py`, `src/hynet/cli/train.py`, `src/hynet/data.py`, `src/hynet/splits.py`.
 - Script: `scripts/lodo.sh` (SCALE, CONSIST*, ...), `scripts/summarize_improvement.py`, `scripts/measure_harm_delta.py`, `scripts/analyze_residual_harm.py`, `scripts/analyze_harmonization.py`, `scripts/spectral_pool.py`.
