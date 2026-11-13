@@ -9,14 +9,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from hynet import data
 from hynet import evaluation
-from hynet.config import get_args
+from hynet.adabn import adapt_batchnorm
+from hynet.config import get_args, str2bool
 from hynet.engine import seed_everything
 from hynet.models.factory import build_model
 from hynet.scoring import score_predictions
 from hynet.splits import segmentation_dataset, weights_paths, run_tag
-
-def str2bool(v):
-    return str(v).lower() in ("true", "1", "yes")
 
 def add_arguments(parser):
     group = parser.add_argument_group("evaluation")
@@ -25,6 +23,8 @@ def add_arguments(parser):
     group.add_argument("--out_dir", type=str, default="outputs/eval", help="Where predictions, tables and the summary are written: <out_dir>/<model>/<split or fold>/")
     group.add_argument("--reuse_predictions", default=False, type=str2bool, nargs="?", const=True,
                        help="Score the masks already saved in <out_dir>/<model>/<split or fold>/predictions instead of running the model (masks of any other model, as binary PNGs named like the images, can be scored too)")
+    group.add_argument("--adabn", default=False, type=str2bool, nargs="?", const=True,
+                       help="Before predicting, re-estimate the BatchNorm statistics on the (unlabeled) test images (adaptive BatchNorm; the weights are unchanged)")
     group.add_argument("--size_edges", type=int, nargs="+", default=[200, 1000], help="Component area edges in pixels (480x640 images) for the size strata")
     group.add_argument("--iou_threshold", type=float, default=0.5, help="IoU needed to match a predicted and a ground-truth component")
     group.add_argument("--min_instance_area", type=int, default=0, help="Components smaller than this (pixels) are ignored in the instance metrics")
@@ -36,6 +36,8 @@ def predict_masks(args, dataset, pred_dir, device, weights_path):
     model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
     model.eval()
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    if args.adabn:
+        adapt_batchnorm(model, (image for image, _ in loader), device)
     with torch.no_grad():
         for i, (image, _) in enumerate(tqdm(loader, desc="Predicting")):
             pred = torch.sigmoid(model(image.to(device))) > 0.5

@@ -111,7 +111,7 @@ def main():
         multi = [m for m in args.models if len(per_seed[m]) > 1]
         if multi:
             averaged = {m: average_rows(per_seed[m]) for m in multi}
-            print(f"\nAveraged over training seeds (models with more than one seed), mean over wells [95% bootstrap CI]; SD = standard deviation of the overall Dice between seeds\n")
+            print("\nAveraged over training seeds (models with more than one seed), mean over wells [95% bootstrap CI]; SD = standard deviation of the overall Dice between seeds\n")
             print(f"{'model':<22}{'seeds':>6}{'Dice per seed':>30}{'SD':>7}" + "".join(f"{label:>26}" for _, label in METRICS[:5]))
             report = {}
             for m in multi:

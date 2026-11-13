@@ -6,14 +6,27 @@ from hynet.losses import TverskyBCELoss, RegionAwareCompositeLoss
 from hynet.models.factory import build_model, needs_harmnet
 from hynet.models.harmnet import HarmNet
 from torch import optim
+from hynet.adversarial import DomainDiscriminator, DomainLabelled, training_adversarial, training_moments
 from hynet.engine import EarlyStopping, training, validation, seed_everything
 from hynet.splits import segmentation_dataset, harmonization_dataset, weights_paths
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
+from hynet import data
 from hynet.config import get_args
+from hynet.consistency import make_consistency
 
-def train_segmentation(args, model, train_loader, val_loader, device, weights_path):
+def training_loader(args, dataset):
+    """Shuffled loader; with --domain_balance every domain of a pooled dataset is drawn with the same probability (with replacement)."""
+    if not args.domain_balance:
+        return DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    sampler = WeightedRandomSampler(data.domain_weights(dataset.image_paths), num_samples=args.samples_per_epoch or len(dataset), replacement=True)
+    return DataLoader(dataset, batch_size=args.batch_size, sampler=sampler)
+
+def train_segmentation(args, model, train_loader, val_loader, device, weights_path, consistency=None):
     """Train a segmentation model (any of hynet.models.factory.MODELS) with the Tversky-BCE loss; the best validation mDICE is kept."""
-    if args.fine_tune:
+    if args.init_weights:
+        model.load_state_dict(torch.load(args.init_weights, map_location=device, weights_only=True))
+        print(f"### Model initialised from {args.init_weights} ###")
+    elif args.fine_tune:
         model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
         print("### Model loaded for fine-tuning ###")
     evaluator = SemanticEvaluator(num_classes=args.num_classes, device=device)
@@ -29,7 +42,7 @@ def train_segmentation(args, model, train_loader, val_loader, device, weights_pa
 
     start_time = timer()
     for epoch in range(args.epochs):
-        train_loss = training(model, train_loader, criterion, optimizer, device, scaler)
+        train_loss = training(model, train_loader, criterion, optimizer, device, scaler, args.micro_batches, consistency)
         val_metrics = validation(model, val_loader, criterion, device, evaluator)
 
         print(f"Epoch [{epoch+1}/{args.epochs}] "
@@ -70,13 +83,28 @@ def train_harmnet(args, train_loader, val_loader, device, weights_path):
 
     scaler = torch.amp.GradScaler("cuda") if args.amp and device.type == "cuda" else None
     best_val_ssim = float('-inf')
+    adversarial = args.harm_domain_adv > 0
+    moments = args.harm_moment_match > 0
+    invariant = adversarial or moments  # these runs keep the last epoch: the best SSIM would be the epoch before the domain is hidden
+    if adversarial:
+        disc = DomainDiscriminator(len(train_loader.dataset.domains)).to(device)
+        optimizer_disc = optim.Adam(disc.parameters(), lr=args.learning_rate)
 
     print(f"Starting training on {device}...")
 
     start_time = timer()
     for epoch in range(args.epochs):
-        train_loss = training(model, train_loader, criterion, optimizer, device, scaler)
+        if adversarial:
+            train_loss, adv_loss, disc_acc = training_adversarial(model, disc, train_loader, criterion, optimizer, optimizer_disc, device,
+                                                                  args.harm_domain_adv, amp=args.amp and device.type == "cuda")
+        elif moments:
+            train_loss, penalty = training_moments(model, train_loader, criterion, optimizer, device, args.harm_moment_match, amp=args.amp and device.type == "cuda")
+            print(f"Domain statistics penalty: {penalty:.4f}")
+        else:
+            train_loss = training(model, train_loader, criterion, optimizer, device, scaler, args.micro_batches)
         val_metrics = validation(model, val_loader, criterion, device)
+        if adversarial:
+            print(f"Adversarial loss: {adv_loss:.4f} | Discriminator accuracy: {disc_acc:.3f} (chance {1 / len(train_loader.dataset.domains):.3f})")
 
         print(f"Epoch [{epoch+1}/{args.epochs}] "
             f"Train Loss: {train_loss:.4f} | "
@@ -87,14 +115,15 @@ def train_harmnet(args, train_loader, val_loader, device, weights_path):
             f"Dice: {val_metrics['dice']:.4f} | "
             f"BG Roughness: {val_metrics['bg_roughness']:.4f}")
 
-        if val_metrics['ssim'] > best_val_ssim:
-            best_val_ssim = val_metrics['ssim']
+        if invariant or val_metrics['ssim'] > best_val_ssim:
+            best_val_ssim = max(best_val_ssim, val_metrics['ssim'])
             torch.save(model.state_dict(), weights_path)
-            print("--> Model saved (Best Val SSIM)")
+            print("--> Model saved (" + ("last epoch" if invariant else "Best Val SSIM") + ")")
 
         scheduler.step(val_metrics['ssim'])
 
-        early_stopping(val_metrics['ssim'])
+        if not invariant:
+            early_stopping(val_metrics['ssim'])
 
         if early_stopping.early_stop:
             print("\n" + "!"*30)
@@ -117,14 +146,23 @@ def main():
     seed_everything(args.seed)
 
     if args.harmnet or args.both:
-        train_loader = DataLoader(harmonization_dataset(args, "train"), batch_size=args.batch_size, shuffle=True)
+        train_set = harmonization_dataset(args, "train")
+        if args.harm_domain_adv > 0 or args.harm_moment_match > 0:
+            train_set = DomainLabelled(train_set)
+        train_loader = training_loader(args, train_set)
         val_loader = DataLoader(harmonization_dataset(args, "val"), batch_size=1, shuffle=False)
         train_harmnet(args, train_loader, val_loader, device, harmnet_path)
     if args.hynet or args.both:
-        model = build_model(args.model, args, device, harmnet_path if needs_harmnet(args.model) else None)
-        train_loader = DataLoader(segmentation_dataset(args, "train", train=True), batch_size=args.batch_size, shuffle=True)
+        # with --init_weights the full checkpoint (HarmNet included) is loaded afterwards, so a pre-trained HarmNet file is not needed
+        model = build_model(args.model, args, device, harmnet_path if needs_harmnet(args.model) and not args.init_weights else None)
+        train_set = segmentation_dataset(args, "train", train=True)
+        train_loader = training_loader(args, train_set)
         val_loader = DataLoader(segmentation_dataset(args, "val"), batch_size=1, shuffle=False)
-        train_segmentation(args, model, train_loader, val_loader, device, model_path)
+        consistency = None
+        if args.consist > 0 or args.consist_harm > 0:
+            target_paths = segmentation_dataset(args, "test").image_paths if args.consist_target else []
+            consistency = make_consistency(args, train_set.image_paths, target_paths)
+        train_segmentation(args, model, train_loader, val_loader, device, model_path, consistency)
 
 if __name__ == "__main__":
     main()

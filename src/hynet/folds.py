@@ -37,13 +37,17 @@ def make_folds(well_fractions, k=5, seed=42, groups=None):
     return {"k": k, "seed": seed, "grouped_by": "group" if groups else "well", "groups": {w: str(unit_of[w]) for w in sorted(unit_of)}, "folds": folds}
 
 def check_folds(doc):
-    """Sanity checks: every well is tested exactly once, the three sets of a fold are disjoint, groups are never split."""
+    """Sanity checks: every well is tested exactly once, the three sets of a fold are disjoint, groups are never split.
+
+    A "holdout" file (e.g. leave-one-dataset-out) has folds whose train/val/test sets need not cover the same wells.
+    """
     folds = doc["folds"]
     tested = [w for f in folds for w in f["test"]]
     assert len(tested) == len(set(tested)), "a well is tested in more than one fold"
     for f in folds:
         assert not (set(f["train"]) & set(f["val"]) or set(f["train"]) & set(f["test"]) or set(f["val"]) & set(f["test"])), "overlapping sets"
-        assert set(f["train"]) | set(f["val"]) | set(f["test"]) == set(tested), "a fold does not cover all the wells"
+        if not doc.get("holdout"):
+            assert set(f["train"]) | set(f["val"]) | set(f["test"]) == set(tested), "a fold does not cover all the wells"
     if doc.get("grouped_by") == "group":
         group_fold = {}
         for i, f in enumerate(folds):
@@ -61,6 +65,14 @@ def load_folds(path):
         doc = json.load(f)
     check_folds(doc)
     return doc
+
+def subset_wells(wells, n, seed=0):
+    """`n` wells drawn at random (reproducibly) from `wells`; the subsets of increasing `n` with the same seed are nested. None keeps all."""
+    wells = sorted(wells)
+    if n is None or n >= len(wells):
+        return wells
+    order = np.random.default_rng(seed).permutation(len(wells))
+    return sorted(wells[i] for i in order[:n])
 
 def fold_wells(doc, fold, role):
     if not 0 <= fold < len(doc["folds"]):

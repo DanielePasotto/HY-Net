@@ -41,6 +41,17 @@ def confusion_counts(pred, gt):
     fn = int(np.sum(~pred & gt))
     return {"tp": tp, "fp": fp, "fn": fn, "tn": int(pred.size - tp - fp - fn)}
 
+def well_dice(preds, masks, names):
+    """{well: (number of images, organoid Dice)} with the pixel counts of the well's images summed; `names` are the image file names."""
+    counts = {}
+    for pred, mask, name in zip(preds, masks, names):
+        c = confusion_counts(pred, mask)
+        total = counts.setdefault(well_id(name), {"n": 0, "tp": 0, "fp": 0, "fn": 0, "tn": 0})
+        total["n"] += 1
+        for k in ("tp", "fp", "fn", "tn"):
+            total[k] += c[k]
+    return {well: (c["n"], overlap_metrics(c)["dice"]) for well, c in counts.items()}
+
 def overlap_metrics(c):
     """Metrics from pixel counts. Dice/IoU of an empty-vs-empty comparison is 1; precision/recall are NaN if undefined."""
     tp, fp, fn, tn = c["tp"], c["fp"], c["fn"], c["tn"]
@@ -210,9 +221,6 @@ def bootstrap_pooled_ci(counts, stat_fn, n_boot=10000, seed=0, alpha=0.05):
     if np.all(np.isnan(boot)):
         return NAN, NAN
     return tuple(np.nanpercentile(boot, [100 * alpha / 2, 100 * (1 - alpha / 2)]))
-
-def _paired_difference_ci(a, b, n_boot, seed, alpha):
-    return bootstrap_mean_ci(np.asarray(a, dtype=float) - np.asarray(b, dtype=float), n_boot, seed, alpha)
 
 def compare_models(rows_a, rows_b, metric="dice", n_boot=10000, seed=0, alpha=0.05):
     """Paired bootstrap CI of the per-well difference `metric(A) - metric(B)` (same wells, same resamples)."""

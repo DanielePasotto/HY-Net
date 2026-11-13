@@ -44,35 +44,54 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
 
-def training(model, loader, criterion, optimizer, device, scaler=None):
-    """One epoch. With a `torch.amp.GradScaler` the forward pass runs in fp16 autocast (the loss is always computed in fp32)."""
+def training(model, loader, criterion, optimizer, device, scaler=None, micro_batches=1, consistency=None):
+    """One epoch. With a `torch.amp.GradScaler` the forward pass runs in fp16 autocast (the loss is always computed in fp32).
+
+    `consistency` (hynet.consistency.Consistency) adds the unsupervised consistency loss of `consistency.pairs` image pairs to every step.
+    With `micro_batches` > 1 every batch is split into that many chunks whose gradients are accumulated before a single optimizer step:
+    the same batch size with a lower peak memory (BatchNorm statistics are computed per chunk).
+    """
     model.train()
     running_loss = 0.0
     amp = scaler is not None
 
     for data in tqdm(loader, desc="Training"):
-        inputs = data[0].to(device)
-        masks = data[1].to(device)
-        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
-            outputs = model(inputs)
-        outputs = outputs.float()
-
-        if len(data) == 3:
-            targets = data[2].to(device)
-            loss, _ = criterion(outputs, targets, masks, inputs)
-        else:
-            loss = criterion(outputs, masks)
-
         optimizer.zero_grad()
+        batch_loss = 0.0
+        for chunk in zip(*(t.chunk(micro_batches) for t in data)):
+            weight = len(chunk[0]) / len(data[0])
+            inputs = chunk[0].to(device)
+            masks = chunk[1].to(device)
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
+                outputs = model(inputs)
+            outputs = outputs.float()
+
+            if len(chunk) == 3:
+                targets = chunk[2].to(device)
+                loss, _ = criterion(outputs, targets, masks, inputs)
+            else:
+                loss = criterion(outputs, masks)
+
+            if amp:
+                scaler.scale(loss * weight).backward()
+            else:
+                (loss * weight).backward()
+            batch_loss += loss.item() * weight
+
+        if consistency is not None:  # unsupervised term, one pair at a time (same peak memory as a chunk)
+            for _ in range(consistency.pairs):
+                with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
+                    loss_c = consistency.loss(model, device) / consistency.pairs
+                (scaler.scale(loss_c) if amp else loss_c).backward()
+                batch_loss += loss_c.item()
+
         if amp:
-            scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
         else:
-            loss.backward()
             optimizer.step()
 
-        running_loss += loss.item()
+        running_loss += batch_loss
 
     return running_loss / len(loader)
 

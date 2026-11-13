@@ -6,6 +6,7 @@ import random
 import numpy as np
 import torchvision.transforms.functional as TF
 import torchvision.transforms as transforms
+from hynet.scale import random_scale
 
 IMG_TRANSFORM = transforms.Compose([
     transforms.ToTensor(),
@@ -58,8 +59,11 @@ class OrganoidDataset(Dataset):
 
     Either `root_dir` (containing images/ and masks/) or an explicit list of `samples` [(image_path, mask_path), ...] is given.
     `with_masks=False` allows inference on a folder that only contains images/ (a zero mask is returned).
+    `image_fn(image, path)`, if given, modifies the normalized float image before the resize (see hynet.perturb).
     """
-    def __init__(self, root_dir=None, transform=None, target_transform=None, train=False, with_masks=True, samples=None):
+    def __init__(self, root_dir=None, transform=None, target_transform=None, train=False, with_masks=True, samples=None, image_fn=None, scale_aug=0.0):
+        self.image_fn = image_fn
+        self.scale_aug = scale_aug  # > 1: random zoom of the training pairs by a factor in [1/scale_aug, scale_aug] (hynet.scale)
         self.transform = transform
         self.target_transform = target_transform
         self.train = train
@@ -89,6 +93,8 @@ class OrganoidDataset(Dataset):
 
     def __getitem__(self, idx):
         image = _load_normalized(self.image_paths[idx])
+        if self.image_fn:
+            image = self.image_fn(image, self.image_paths[idx])
         if self.transform:
             image = self.transform(image)
 
@@ -106,6 +112,8 @@ class OrganoidDataset(Dataset):
             if random.random() > 0.5:
                 image = TF.vflip(image)
                 mask = TF.vflip(mask)
+            if self.scale_aug > 1 and random.random() < 0.5:
+                image, mask = random_scale(image, mask, self.scale_aug)
         return image, mask
 
 class HarmonizationDataset(Dataset):
@@ -173,7 +181,24 @@ def pool_harmonization_samples(processed_path, input_folder="true_images", targe
     """{key: (image_path, mask_path, target_path)} over all the splits of the processed dataset."""
     pool = {}
     for split in SPLITS:
+        if not os.path.isdir(os.path.join(processed_path, split)):
+            continue
         ds = HarmonizationDataset(os.path.join(processed_path, split), input_folder, target_folder, mask_folder)
         for image, mask, target in zip(ds.image_paths, ds.mask_paths, ds.target_paths):
             pool[sample_key(image)] = (image, mask, target)
     return pool
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Datasets pooled from several sources (hynet-prepare-pool): files are named IMG_<domain>-<id>_Interval<n>.<ext>
+# ----------------------------------------------------------------------------------------------------------------
+def domain_of(path):
+    """'.../IMG_orgaseg-0002_x_Interval0.png' -> 'orgaseg'; names without a domain prefix all belong to the domain ''."""
+    key = _pair_key(os.path.basename(path))
+    return key.split("-", 1)[0] if "-" in key.split("_", 1)[0] else ""
+
+def domain_weights(paths):
+    """Sampling weight of every sample such that each domain is drawn with the same total probability."""
+    domains = [domain_of(p) for p in paths]
+    counts = {d: domains.count(d) for d in set(domains)}
+    return [1.0 / counts[d] for d in domains]

@@ -60,3 +60,7 @@ CLAUDE.local.md
 Thumbs.db
 desktop.ini
 slurm/
+
+# tool working folders (knowledge graph, model debates)
+.ua/
+.duel/

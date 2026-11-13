@@ -1,9 +1,10 @@
 """Datasets and file locations for a run, either on the original train/val/test folders or on a cross-validation fold."""
+import functools
 import os
 
-from hynet import data
+from hynet import data, perturb
 from hynet.evaluation import well_id
-from hynet.folds import load_folds, fold_wells
+from hynet.folds import load_folds, fold_wells, subset_wells
 
 def run_tag(args, split="test"):
     return f"fold{args.fold}" if args.folds_file else split
@@ -26,9 +27,17 @@ def _select(pool, wells, what):
 def segmentation_dataset(args, role, train=False):
     """Dataset of the wells of `role` ('train' | 'val' | 'test'): from --folds_file/--fold if given, else from <dataset_path>/<role>."""
     kwargs = dict(transform=data.IMG_TRANSFORM, target_transform=data.MASK_TRANSFORM, train=train)
+    if train:
+        kwargs["scale_aug"] = getattr(args, "scale_aug", 0.0)
+    if train and getattr(args, "augment", False):  # --augment: random photometric augmentation of the training images
+        kwargs["image_fn"] = functools.partial(perturb.random_augment, ranges=getattr(args, "augment_range", "default"))
+    elif getattr(args, "perturb", None):  # --perturb name:level: the same perturbation of every image (robustness test)
+        kwargs["image_fn"] = perturb.fixed(args.perturb)
     if not args.folds_file:
         return data.OrganoidDataset(os.path.join(args.dataset_path, role), **kwargs)
     wells = fold_wells(load_folds(args.folds_file), args.fold, role)
+    if role in ("train", "val"):  # --n_train/--n_val: few-shot fine-tuning on a random subset of the wells
+        wells = subset_wells(wells, getattr(args, f"n_{role}"), args.subset_seed)
     return data.OrganoidDataset(samples=_select(data.pool_segmentation_samples(args.dataset_path), wells, role), **kwargs)
 
 def harmonization_dataset(args, role):

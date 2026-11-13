@@ -69,3 +69,21 @@ class HarmNet(nn.Module):
         x += residual
         x = self.out(x)
         return x
+
+class ResidualHarmNet(HarmNet):
+    """HarmNet that predicts a bounded correction of its input: out = x + scale * tanh(conv(features)).
+
+    The last convolution starts at zero, so the network is the identity at initialization and only changes the image
+    where the segmentation loss asks for it. It needs no pre-training on a classical-pipeline target.
+    """
+    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, scale: float = 0.5) -> None:
+        assert input_shape == output_shape
+        super().__init__(input_shape, hidden_units, output_shape)
+        self.scale = scale
+        conv = self.out[0]
+        nn.init.zeros_(conv.weight)
+        nn.init.zeros_(conv.bias)
+        self.out = nn.Sequential(conv, nn.Tanh())
+
+    def forward(self, x):
+        return x + self.scale * super().forward(x)

@@ -20,7 +20,7 @@ Python 3.13 is pinned in `.python-version` (uv downloads it if needed). Commands
 
 ### Main Dependencies
 - PyTorch & Torchvision
-- NumPy, scikit-image, Pillow, tqdm
+- NumPy, SciPy, scikit-image, Pillow, OpenCV (headless, for the HarmNet targets), tqdm
 - pytorch-msssim
 
 ## Repository Layout
@@ -36,14 +36,17 @@ src/hynet/
 ├── folds.py, splits.py
 │                      # well-grouped cross-validation folds and the datasets/paths of a run
 ├── scoring.py         # score saved prediction masks
+├── targets.py         # classical pre-processing pipeline = HarmNet targets
+├── perturb.py         # photometric perturbations: robustness sweep and training augmentation
 ├── models/
 │   ├── harmnet.py     # HarmNet (image harmonization)
 │   ├── hynet.py       # HY-Net: HarmNet + Asymmetric Gated Y-Net (with ablation options)
 │   ├── baselines.py   # U-Net, Attention U-Net, HarmNet + U-Net
 │   └── factory.py     # build_model(name): the models compared in the paper
-└── cli/               # train, test, evaluate, compare, make_folds, predict, benchmark, prepare_external
-scripts/               # analysis scripts (what HarmNet does to the images)
+└── cli/               # train, test, evaluate, compare, make_folds, make_targets, predict, benchmark, prepare_external, prepare_pool, robustness, postproc
+scripts/               # experiment drivers (lodo, finetune_external, robustness, postproc), summaries, HarmNet visualization
 folds/                 # cross-validation folds (versioned, so that results can be reproduced)
+docs/                  # experiment protocols (experiments.md)
 tests/                 # unit tests (pytest)
 outputs/               # runs and evaluations (not versioned)
 data/                  # datasets (not versioned)
@@ -69,6 +72,13 @@ data/
 ```
 
 Files are paired by name (`IMG_B11_Interval1.tif` ↔ `MASK_B11_Interval1.tif`); `hynet-predict` only needs `images/` in the folder passed with `--dataset_path`.
+
+The processed dataset can be regenerated from the segmentation dataset (or built for any other dataset with the same `<split>/images` and `<split>/masks` layout):
+```bash
+uv run --extra cu128 hynet-make-targets --input_root data/DatasetOrganoidsSplitted_70_15_15 --output_root data/ProcessedDatasetOrganoidsSplitted_70_15_15
+```
+The targets are the output of the classical pipeline in `src/hynet/targets.py`. Its filters are sized in pixels for our 1280x960 images, so the images of other
+datasets are first brought to that size (`--pipeline_size`); on our dataset the command reproduces the released targets to within one grey level.
 
 ## Usage
 
@@ -121,53 +131,8 @@ Masks from any other model can be scored by placing them in `predictions/` (PNG,
 The metrics live in `src/hynet/evaluation.py` (numpy/scipy only); unit tests: `uv run --extra cpu pytest`.
 Touching organoids are a single object in the semantic ground truth, so instance metrics evaluate organoid clusters.
 
-### 4. Cross-validated comparison with baselines and ablations
-All models are trained and scored with the same code, folds and metrics. Folds are **grouped by well** (optionally by donor/plate with `--groups_csv`),
-every well is in the test set of exactly one fold, so each model gets out-of-fold predictions for all the wells.
-
-```bash
-uv run --extra cu128 hynet-make-folds                      # -> folds/k5_seed42.json (5 folds, 66 wells, balanced by organoid density)
-
-# for each fold k = 0..4
-F="--folds_file folds/k5_seed42.json --fold $k"
-uv run --extra cu128 hynet-train --harmnet true --hynet false --amp true $F      # HarmNet of the fold (trained on the fold's training wells only)
-for m in hynet hynet_frozen hynet_nogate harm_unet ynet_raw unet attunet; do
-  uv run --extra cu128 hynet-train    --model $m --amp true $F         # weights -> outputs/runs/<model>/fold<k>/model.pth
-  uv run --extra cu128 hynet-evaluate --model $m $F                    # masks and metrics -> outputs/eval/<model>/fold<k>/
-done
-
-uv run --extra cu128 hynet-compare --folds_file folds/k5_seed42.json --models hynet unet attunet ynet_raw
-```
-`hynet-compare` prints per-well mean [95% bootstrap CI] of each metric and the paired per-well differences with respect to the reference model (`--reference`, default the first).
-Models (`--model`): `hynet` (full), `hynet_frozen` (HarmNet not fine-tuned), `hynet_nogate` (concatenation instead of attention+gating),
-`ynet_raw` (dual-stream Y-Net without harmonization), `harm_unet` (HarmNet + single-stream U-Net), `unet`, `attunet`.
-
-`--amp true` trains in fp16 mixed precision (loss in fp32). The dual-stream models need it on a 12 GB GPU (about 11.5 GB peak for `hynet` with batch size 4);
-`hynet-benchmark --amp true` reports memory and speed per model, and `hynet-benchmark --inference true` the number of parameters and the latency of a forward pass.
-
-**Training seeds.** `--seed` sets the seed; to keep the runs of other seeds apart use `--runs_root outputs/runs_s43` for `hynet-train` and `hynet-evaluate`
-and `--out_dir outputs/eval_s43` for `hynet-evaluate`. `hynet-compare --extra_eval_dirs outputs/eval_s43 outputs/eval_s44` then also reports, for the models
-available in them, the per-seed Dice, its standard deviation between seeds and the paired differences of the seed-averaged per-well values.
-
-Masks produced by any other model can be scored by writing them as binary PNGs (480x640) in `outputs/eval/<model>/fold<k>/predictions/` and using `--reuse_predictions true`.
-
-### 4b. External datasets
-Models trained on the folds can be applied, without adaptation, to public datasets with masks. `hynet-prepare-external` converts them to the layout of this
-repository (each image is its own "well"; `--letterbox` keeps the aspect ratio instead of stretching the image to 480x640):
-
-```bash
-uv run --extra cu128 hynet-prepare-external --dataset organosegment    # OrgaSegment OrganoidBasic val+eval -> data/external/organosegment, folds/external_organosegment.json
-uv run --extra cu128 hynet-prepare-external --dataset organoid         # OrganoID testing sets          -> data/external/organoid, folds/external_organoid.json
-
-# the model of every fold k on the external images (all the images are "fold 0" of the external folds file)
-uv run --extra cu128 hynet-evaluate --model hynet --folds_file folds/external_organoid.json --fold 0 --dataset_path data/external/organoid \
-    --weights_path outputs/runs/hynet/fold$k/model.pth --out_dir outputs/eval_ext/organoid/m$k
-
-# score and average the five fold models
-uv run --extra cu128 hynet-compare --dataset_path data/external/organoid --folds_file folds/external_organoid.json --models hynet unet \
-    --eval_dir outputs/eval_ext/organoid/m0 --extra_eval_dirs outputs/eval_ext/organoid/m{1,2,3,4} --replicates_label "fold models"
-```
-`scripts/visualize_harmonization.py` saves panels (input, HarmNet before and after the end-to-end training) and statistics of what HarmNet does to the images of each dataset.
+### 4. Experiments
+Cross-validated comparison with baselines and ablations, external datasets, few-shot adaptation, leave-one-dataset-out training, robustness to perturbations and test-time options are described in [docs/experiments.md](docs/experiments.md).
 
 ### 5. Inference (`hynet-predict`)
 Run inference on a set of images to extract the predicted segmentation masks. The outputs are saved as `.png` images matching the original inputs.

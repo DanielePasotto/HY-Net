@@ -83,7 +83,7 @@ def main():
         wells.append(well)
     assert len(set(wells)) == len(wells), "duplicate image ids"
     os.makedirs(args.folds_dir, exist_ok=True)
-    doc = {"k": 1, "seed": 0, "grouped_by": "well", "groups": {w: w for w in wells}, "folds": [{"train": [], "val": [], "test": wells}]}
+    doc = {"k": 1, "seed": 0, "grouped_by": "well", "folds": [{"train": [], "val": [], "test": wells}]}
     with open(os.path.join(args.folds_dir, f"external_{name}.json"), "w") as f:
         json.dump(doc, f, indent=2)
     print(f"{len(wells)} images of {args.dataset} written to {out}")
