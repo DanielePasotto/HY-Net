@@ -339,3 +339,38 @@ Letture:
 - **Cosa resta in vantaggio a HY-Net:** nessun guadagno di accuratezza misurabile. Il punto di forza dimostrato è la robustezza (sezione precedente) e il costo, ma il costo non è stato misurato in questo ciclo (parametri, tempo per epoca: da rilevare per il paper).
 
 Cautele: due semi (tre solo per la riga E); il seme 43 di Ka, Ua e Ra gira su una GPU diversa dal seme 42 (l'effetto della GPU misurato è piccolo, vedi sopra); il riferimento E di OrganoID ha anche il seme 44, ma le differenze appaiate usano solo 42 e 43; Wr non è stato provato su OrganoID; la robustezza di Ka e Ua non è stata misurata; nessun intervallo di confidenza sulle differenze tra modelli; scelte di ricetta fatte guardando i domini di test.
+
+### Robustezza di CAMPEOD e U-Net, e costo dei modelli (2026-11-17)
+
+Robustezza (`hynet-robustness`, tutta la sweep, semi 42 e 43 insieme, differenza appaiata sui pozzetti, intervallo bootstrap al 95% sui pozzetti). Job 2346-2353; gruppi `outputs/robustness/lodo_{Ka,Ua}_<dominio>[_s43]`. Le valutazioni del seme 43 sono state eseguite sulle 3060 (i modelli del seme 43 sono stati addestrati su `claudio`). Tutti i modelli sono addestrati con scala 2 e augmentation fotometrica di default, tranne Wr che usa l'augmentation ampia.
+
+Dice assoluto (media su pozzetti e semi):
+
+| impostazione | `ours`: CAMPEOD | Wr | Y-Net Ya | U-Net | `orgaseg`: CAMPEOD | Wr | Y-Net Ya | U-Net |
+|---|---|---|---|---|---|---|---|---|
+| pulito | 87,74 | 87,38 | 87,95 | 85,85 | 87,13 | 87,45 | 87,29 | 87,14 |
+| gamma 0,5 | 80,58 | 81,39 | 76,76 | 77,48 | 88,49 | 88,43 | 88,68 | 88,78 |
+| noise 0,1 | 86,36 | 85,93 | 86,09 | 84,10 | 83,98 | 86,90 | 84,05 | 86,09 |
+| blur 2 | 82,90 | 86,04 | 85,91 | 83,92 | 86,57 | 87,20 | 86,72 | 86,60 |
+| blur 4 | 50,16 | 82,78 | 77,87 | 76,91 | 74,43 | 85,90 | 78,81 | 79,73 |
+| media perturbate | 84,10 | 86,32 | 85,98 | 84,24 | 85,88 | 87,16 | 86,35 | 86,40 |
+
+Wr (`hynet_res` con augmentation ampia) meno CAMPEOD: pulito -0,36 [-0,65, -0,07] su `ours` e +0,32 [+0,15, +0,49] su `orgaseg`; media delle perturbate +2,22 [+1,85, +2,62] e +1,27 [+1,02, +1,53]; blur 4 +32,6 e +11,5; noise 0,1 -0,43 e +2,92; gamma 0,5 +0,81 e -0,06. Su `ours` CAMPEOD è leggermente meglio di Wr su rumore, ombreggiatura (-0,5 e -0,8) e JPEG; su `orgaseg` Wr è sopra su quasi tutte le perturbazioni.
+
+Il Y-Net grezzo Ya (con augmentation di default, come CAMPEOD) supera CAMPEOD sulla media delle perturbate di +1,87 su `ours` e +0,47 su `orgaseg` (blur 4: +27,7 e +4,4), ma resta peggiore di CAMPEOD con gamma 0,5 su `ours` (-3,82). U-Net: perde 1,9 punti a immagine pulita su `ours`, è pari su `orgaseg`, e dà +26,8 e +5,3 con blur 4 rispetto a CAMPEOD.
+
+Letture:
+- **CAMPEOD è fragile alla sfocatura** (blur 4: 50,2 su `ours`, 74,4 su `orgaseg`) e al rumore forte su `orgaseg` (noise 0,1: 84,0). Questo spiega quasi tutto il vantaggio di robustezza di HY-Net e anche degli altri modelli senza CAMPEOD; non è specifico di HarmNet. Probabilmente dipende anche dal ridimensionamento a 512x512 dell'ingresso di CAMPEOD (non verificato).
+- **Il confronto non è del tutto equo a favore di HY-Net**: Wr è addestrato con l'augmentation ampia, CAMPEOD con quella di default; CAMPEOD con augmentation ampia non è stato provato. Il confronto equo sullo stesso range è Ya contro Ka (sopra), dove il vantaggio esiste ma è più piccolo su `orgaseg`.
+- **Cosa si può dire nel paper:** a Dice pulito pari (entro 0,4 sui domini intestinali), HY-Net con augmentation ampia è molto più robusto di CAMPEOD alla sfocatura e al rumore forte, perde poco o nulla su gamma, ombreggiatura e JPEG, e ha un quinto dei parametri. Il merito dell'armonizzatore residuo isolato resta quello della sezione precedente (Wr meno Wy: da +0,6 a +1,2 sulla media delle perturbate).
+
+Costo (RTX 3060, job `bench_cost` 2354 e `bench_cam` 2355, `hynet-benchmark`, 5 iterazioni cronometrate con AMP; la durata per epoca è un'estrapolazione a 195 immagini):
+
+| modello | parametri | inferenza fp32 (480x640, batch 1) | memoria di picco in addestramento | min/epoca (batch) |
+|---|---|---|---|---|
+| U-Net | 31,0 M | 58 ms | 4,25 GB | 0,31 (4) |
+| Y-Net grezzo | 36,1 M | 88 ms | 4,10 GB | 0,49 (2) |
+| `hynet_res` e `hynet` | 37,5 M | 133 ms | 6,17 GB | 0,73 (2) |
+| CAMPEOD | 177,1 M | 117 ms | 5,33 GB | 0,77 (1); a batch 4 esaurisce la memoria |
+
+CAMPEOD ha 4,7 volte i parametri di HY-Net ma l'inferenza è più veloce (117 contro 133 ms): il vantaggio di HY-Net è sui parametri, non sulla velocità. I tempi per epoca sono a batch diversi (quello usato nel LODO è 4 con accumulo: 2 passi da 2 per i modelli con HarmNet, 4 da 1 per CAMPEOD), quindi vanno letti come ordine di grandezza.
