@@ -9,6 +9,7 @@ MODELS = {
     "hynet_sum": ("HY-Net with attention and additive fusion instead of learned gates", True),
     "hynet_nogate": ("HY-Net with plain concatenation of the two streams, no attention and no gating", True),
     "hynet_res": ("HY-Net with a residual HarmNet (identity at start, no classical-pipeline target), trained end to end", False),
+    "hynet_fast": ("hynet_res whose residual HarmNet works at half resolution (about 1/4 of its operations)", False),
     "hynet_par": ("HY-Net with a parametric harmonizer (smooth illumination field + monotone tone curve), trained end to end", False),
     "ynet_raw": ("dual-stream Y-Net fed with the raw image in both streams (no harmonization)", False),
     "harm_unet": ("HarmNet + single-stream U-Net on the harmonized image", True),
@@ -42,6 +43,8 @@ def build_model(name, args, device, harmnet_weights_path=None):
         return HYNet(*shapes, device, harmnet_weights_path, use_attention=False, fusion="concat", norm=norm)
     if name == "hynet_res":
         return HYNet(*shapes, device, None, norm=norm, residual_harm=True)
+    if name == "hynet_fast":
+        return HYNet(*shapes, device, None, norm=norm, residual_harm=True, harm_down=2)
     if name == "hynet_par":
         return HYNet(*shapes, device, None, norm=norm, param_harm=True)
     if name == "ynet_raw":

@@ -77,18 +77,26 @@ class ResidualHarmNet(HarmNet):
 
     The last convolution starts at zero, so the network is the identity at initialization and only changes the image
     where the segmentation loss asks for it. It needs no pre-training on a classical-pipeline target.
+
+    With `down` > 1 the network looks at a version of the image reduced by that factor and the correction it predicts is bilinearly interpolated back
+    to the input size before it is added to the full-resolution image: about `down`**2 times fewer operations in HarmNet, at the price of a correction
+    with no detail finer than `down` pixels.
     """
-    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, scale: float = 0.5) -> None:
+    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, scale: float = 0.5, down: int = 1) -> None:
         assert input_shape == output_shape
         super().__init__(input_shape, hidden_units, output_shape)
         self.scale = scale
+        self.reduce = down
         conv = self.out[0]
         nn.init.zeros_(conv.weight)
         nn.init.zeros_(conv.bias)
         self.out = nn.Sequential(conv, nn.Tanh())
 
     def forward(self, x):
-        return x + self.scale * super().forward(x)
+        if self.reduce == 1:
+            return x + self.scale * super().forward(x)
+        low = super().forward(F.avg_pool2d(x, self.reduce, ceil_mode=True))
+        return x + self.scale * F.interpolate(low, size=x.shape[2:], mode="bilinear", align_corners=False)
 
 
 class ParametricHarmNet(nn.Module):

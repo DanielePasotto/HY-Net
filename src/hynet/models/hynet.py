@@ -162,17 +162,23 @@ class HYNet(nn.Module):
     `freeze_encoders=True` keeps HarmNet and both Y-Net encoders fixed while adapting the fusion and decoder.
     `use_attention`/`fusion`/`norm` are forwarded to the Y-Net. `weights_path=None` leaves HarmNet randomly initialized.
     `residual_harm=True` uses ResidualHarmNet (identity at initialization, trained only through the segmentation loss); `param_harm=True` uses ParametricHarmNet
-    (smooth illumination field and global tone curve only).
+    (smooth illumination field and global tone curve only); `harm_down` > 1 makes the residual HarmNet work on a reduced image (faster inference).
     """
     def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device, weights_path: str,
                  harmonize: bool = True, freeze_harmnet: bool = False, use_attention: bool = True,
-                 fusion: str = "gated", freeze_encoders: bool = False, norm: str = "batch", residual_harm: bool = False, param_harm: bool = False) -> None:
+                 fusion: str = "gated", freeze_encoders: bool = False, norm: str = "batch", residual_harm: bool = False, param_harm: bool = False, harm_down: int = 1) -> None:
         super(HYNet, self).__init__()
         self.harmonize = harmonize
         self.freeze_harmnet = freeze_harmnet
         self.freeze_encoders = freeze_encoders
         if harmonize:
-            self.harmnet = (ParametricHarmNet if param_harm else ResidualHarmNet if residual_harm else HarmNet)(input_shape, hidden_units, input_shape).to(device)
+            if param_harm:
+                harmnet = ParametricHarmNet(input_shape, hidden_units, input_shape)
+            elif residual_harm:
+                harmnet = ResidualHarmNet(input_shape, hidden_units, input_shape, down=harm_down)
+            else:
+                harmnet = HarmNet(input_shape, hidden_units, input_shape)
+            self.harmnet = harmnet.to(device)
             if weights_path is not None:
                 self.harmnet.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
             if freeze_harmnet:

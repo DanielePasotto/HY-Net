@@ -11,7 +11,7 @@ ARGS = argparse.Namespace(input_shape=1, hidden_units=64, output_shape=1)
 CHECKPOINT = "checkpoints/hynet_weights.pth"
 CPU = torch.device("cpu")
 
-@pytest.mark.parametrize("name", list(MODELS))
+@pytest.mark.parametrize("name", [m for m in MODELS if m != "campeod"])  # campeod needs third-party code that is not in the repository
 def test_forward_shape_and_backward(name):
     torch.manual_seed(0)
     model = build_model(name, ARGS, CPU)
@@ -70,6 +70,15 @@ def test_residual_harmnet_is_identity_at_start_and_learns():
     assert torch.equal(model.harmnet(x), x)
     model(x).mean().backward()
     assert model.harmnet.out[0].weight.grad.abs().sum() > 0  # the zero-initialized layer does receive gradient
+
+def test_fast_residual_harmnet_is_identity_at_start_and_works_on_a_reduced_image():
+    model = build_model("hynet_fast", ARGS, CPU)
+    x = torch.rand(2, 1, 32, 48)
+    assert torch.equal(model.harmnet(x), x)
+    model.harmnet.out[0].bias.data.fill_(0.5)  # a non-zero correction must come back at the input size
+    assert model.harmnet(x).shape == x.shape
+    model(x).mean().backward()
+    assert model.harmnet.out[0].weight.grad.abs().sum() > 0
 
 @pytest.mark.skipif(not os.path.exists(CHECKPOINT), reason="released checkpoint not available")
 def test_released_checkpoint_still_loads_strictly():

@@ -36,7 +36,7 @@ CONSIST_BN_EVAL=${CONSIST_BN_EVAL:-false}
 ADABN=${ADABN:-false}
 # the dual-stream models do not fit a batch of 4 in 12 GB at the very peak: same batch, accumulated over MICRO chunks
 case $MODEL in
-  hynet|hynet_res|hynet_par|hynet_frozen|hynet_nogate|harm_unet|harmnet) MICRO=${MICRO:-2};;
+  hynet|hynet_res|hynet_fast|hynet_par|hynet_frozen|hynet_nogate|harm_unet|harmnet) MICRO=${MICRO:-2};;
   *) MICRO=${MICRO:-1};;
 esac
 SMALL_WEIGHT=${SMALL_WEIGHT:-1}

@@ -18,7 +18,7 @@ def get_args(add_arguments=None):
     # General Execution
     parser.add_argument("--harmnet", default=False, help="Train/Test HarmNet", **flag)
     parser.add_argument("--hynet", default=True, help="Train/Test the segmentation model selected with --model", **flag)
-    parser.add_argument("--model", type=str, default="hynet", help="Segmentation model (hynet, hynet_frozen, hynet_decoder, hynet_sum, hynet_nogate, hynet_res, hynet_par, ynet_raw, harm_unet, unet, attunet)")
+    parser.add_argument("--model", type=str, default="hynet", help="Segmentation model (hynet, hynet_frozen, hynet_decoder, hynet_sum, hynet_nogate, hynet_res, hynet_fast, hynet_par, ynet_raw, harm_unet, unet, attunet)")
     parser.add_argument("--both", default=False, help="Train/Test both HarmNet and HY-Net", **flag)
     parser.add_argument("--fine_tune", default=False, help="Fine tune HY-Net", **flag)
 

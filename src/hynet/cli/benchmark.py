@@ -10,6 +10,8 @@ def add_arguments(parser):
     group.add_argument("--iters", type=int, default=5, help="Timed training iterations per model")
     group.add_argument("--train_images", type=int, default=195, help="Training images per fold, to extrapolate the time of an epoch")
     group.add_argument("--inference", type=str2bool, default=False, help="Measure parameters, latency and peak memory of inference instead of training")
+    group.add_argument("--channels_last", type=str2bool, default=False, help="Inference benchmark: channels-last memory format")
+    group.add_argument("--compile", type=str2bool, default=False, help="Inference benchmark: torch.compile the model")
 
 @torch.no_grad()
 def benchmark_inference(args, device):
@@ -19,6 +21,10 @@ def benchmark_inference(args, device):
     for name in args.models:
         model = build_model(name, args, device).eval()
         x = torch.rand(1, 1, 480, 640, device=device)
+        if args.channels_last:
+            model, x = model.to(memory_format=torch.channels_last), x.to(memory_format=torch.channels_last)
+        if args.compile:
+            model = torch.compile(model)
         row = []
         for dtype in (None, torch.float16):
             torch.cuda.reset_peak_memory_stats()
