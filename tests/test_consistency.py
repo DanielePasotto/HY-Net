@@ -37,6 +37,15 @@ def test_harm_term_only_for_models_with_harmnet_and_positive_weight():
     raw = build_model("ynet_raw", ARGS, CPU).eval()
     assert Consistency(batch, 0.0, 5.0).loss(raw, CPU).item() == 0.0  # no HarmNet: nothing to make consistent
 
+def test_bn_eval_keeps_running_statistics_and_training_mode():
+    model = build_model("ynet_raw", ARGS, CPU)
+    bn = next(m for m in model.modules() if isinstance(m, torch.nn.BatchNorm2d))
+    before = bn.running_mean.clone()
+    Consistency(list(loader()), 5.0, 0.0, bn_eval=True).loss(model, CPU)
+    assert torch.equal(bn.running_mean, before) and bn.training
+    Consistency(list(loader()), 5.0, 0.0).loss(model, CPU)
+    assert not torch.equal(bn.running_mean, before)
+
 def test_pair_dataset_gives_two_different_views(tmp_path):
     path = tmp_path / "a.png"
     Image.fromarray((np.random.RandomState(0).rand(60, 80) * 255).astype(np.uint8)).save(path)
@@ -47,7 +56,7 @@ def test_pair_dataset_gives_two_different_views(tmp_path):
 def test_target_images_get_half_of_the_draws(tmp_path):
     for name in ("s", "t"):
         Image.fromarray(np.zeros((8, 8), np.uint8)).save(tmp_path / f"{name}.png")
-    args = argparse.Namespace(augment_range="default", consist=1.0, consist_harm=0.0, consist_pairs=2)
+    args = argparse.Namespace(augment_range="default", consist=1.0, consist_harm=0.0, consist_pairs=2, consist_bn_eval=False)
     cons = make_consistency(args, [str(tmp_path / "s.png")], [str(tmp_path / "t.png")])
     sampler = cons.batches.gi_frame.f_locals["loader"].sampler
     idx = torch.tensor(list(sampler)[:4000])

@@ -104,3 +104,33 @@ def test_adaptive_batchnorm_changes_statistics_not_weights():
     assert not model.training
     assert any(not torch.equal(a, m.running_mean) for a, m in zip(stats, [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm2d)]))
     assert all(torch.equal(v, model.state_dict()[k]) for k, v in weights.items())
+
+def test_parametric_harmonizer_is_bounded_and_monotone_at_start():
+    torch.manual_seed(0)
+    net = build_model("hynet_par", ARGS, CPU).harmnet
+    x = torch.rand(1, 1, 64, 96)
+    out = net(x)
+    assert out.shape == x.shape and out.min() >= 0 and out.max() <= 1
+    # zero-initialized heads: standardization + identity tone curve = a monotone function of the input
+    assert (out.flatten()[x.flatten().argsort()].diff() >= -1e-5).all()
+
+def test_parametric_harmonizer_field_comes_from_a_coarse_grid():
+    net = build_model("hynet_par", ARGS, CPU).harmnet
+    grid = net.field(net.encoder(torch.rand(1, 1, 96, 128)))
+    assert grid.shape[2:] == (12, 16)  # the correction cannot have more detail than this grid
+
+def test_parametric_harmonizer_is_trained_by_consistency_without_running_the_ynet():
+    from hynet.consistency import Consistency
+    torch.manual_seed(0)
+    model = build_model("hynet_par", ARGS, CPU)
+    for p in model.harmnet.parameters():
+        torch.nn.init.normal_(p, 0, 0.3)
+    bn = next(m for m in model.ynet.modules() if isinstance(m, torch.nn.BatchNorm2d))
+    before = bn.running_mean.clone()
+    v1 = torch.rand(1, 1, 64, 96)
+    loss = Consistency([(v1, torch.rand(1, 1, 64, 96))], 0.0, 5.0).loss(model, CPU)
+    loss.backward()
+    assert loss.item() > 0
+    assert torch.equal(bn.running_mean, before)  # the Y-Net did not see the views
+    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.harmnet.parameters())
+    assert all(p.grad is None for p in model.ynet.parameters())

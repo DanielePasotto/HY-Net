@@ -1,3 +1,5 @@
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -98,17 +100,32 @@ class TverskyBCELoss(nn.Module):
         self.beta = beta
         self.smooth = smooth
 
-    def forward(self, inputs, targets):
+    def forward(self, inputs, targets, weight=None):
+        """`weight` (same shape as the masks) multiplies every pixel's contribution to the Tversky terms and to the BCE (see small_object_weights)."""
         inputs = F.sigmoid(inputs)
         inputs = inputs.view(-1)
         targets = targets.view(-1)
+        w = 1.0 if weight is None else weight.reshape(-1)
 
-        TP = (inputs * targets).sum()
-        FP = ((1-targets) * inputs).sum()
-        FN = (targets * (1-inputs)).sum()
+        TP = (w * inputs * targets).sum()
+        FP = (w * (1-targets) * inputs).sum()
+        FN = (w * targets * (1-inputs)).sum()
 
         Tversky = (TP + self.smooth) / (TP + self.alpha*FP + self.beta*FN + self.smooth)
 
-        BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        if weight is None:
+            BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        else:
+            BCE = (w * F.binary_cross_entropy(inputs, targets, reduction='none')).sum() / w.sum()
 
         return BCE + (1 - Tversky)
+
+def small_object_weights(masks, factor, max_area=200):
+    """Pixel weights of a batch of binary masks (B, 1, H, W): `factor` on the pixels of the connected components smaller than `max_area` pixels, 1 elsewhere."""
+    out = np.ones(tuple(masks.shape), np.float32)
+    for i, m in enumerate((masks[:, 0] > 0.5).cpu().numpy().astype(np.uint8)):
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+        small = np.zeros(n, bool)
+        small[1:] = stats[1:, cv2.CC_STAT_AREA] < max_area
+        out[i, 0][small[labels]] = factor
+    return torch.from_numpy(out).to(masks.device)

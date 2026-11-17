@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
-from .harmnet import HarmNet, ResidualHarmNet
+from .harmnet import HarmNet, ParametricHarmNet, ResidualHarmNet
 
 def make_norm(kind, channels):
     """BatchNorm (the published model) or GroupNorm: its statistics are computed per image, so they depend neither on the batch size nor on the training domain."""
@@ -161,17 +161,18 @@ class HYNet(nn.Module):
     streams, `freeze_harmnet=True` keeps HarmNet fixed (static pre-processing instead of end-to-end training),
     `freeze_encoders=True` keeps HarmNet and both Y-Net encoders fixed while adapting the fusion and decoder.
     `use_attention`/`fusion`/`norm` are forwarded to the Y-Net. `weights_path=None` leaves HarmNet randomly initialized.
-    `residual_harm=True` uses ResidualHarmNet (identity at initialization, trained only through the segmentation loss).
+    `residual_harm=True` uses ResidualHarmNet (identity at initialization, trained only through the segmentation loss); `param_harm=True` uses ParametricHarmNet
+    (smooth illumination field and global tone curve only).
     """
     def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device, weights_path: str,
                  harmonize: bool = True, freeze_harmnet: bool = False, use_attention: bool = True,
-                 fusion: str = "gated", freeze_encoders: bool = False, norm: str = "batch", residual_harm: bool = False) -> None:
+                 fusion: str = "gated", freeze_encoders: bool = False, norm: str = "batch", residual_harm: bool = False, param_harm: bool = False) -> None:
         super(HYNet, self).__init__()
         self.harmonize = harmonize
         self.freeze_harmnet = freeze_harmnet
         self.freeze_encoders = freeze_encoders
         if harmonize:
-            self.harmnet = (ResidualHarmNet if residual_harm else HarmNet)(input_shape, hidden_units, input_shape).to(device)
+            self.harmnet = (ParametricHarmNet if param_harm else ResidualHarmNet if residual_harm else HarmNet)(input_shape, hidden_units, input_shape).to(device)
             if weights_path is not None:
                 self.harmnet.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
             if freeze_harmnet:

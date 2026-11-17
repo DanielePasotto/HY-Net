@@ -18,7 +18,7 @@ def get_args(add_arguments=None):
     # General Execution
     parser.add_argument("--harmnet", default=False, help="Train/Test HarmNet", **flag)
     parser.add_argument("--hynet", default=True, help="Train/Test the segmentation model selected with --model", **flag)
-    parser.add_argument("--model", type=str, default="hynet", help="Segmentation model (hynet, hynet_frozen, hynet_decoder, hynet_sum, hynet_nogate, hynet_res, ynet_raw, harm_unet, unet, attunet)")
+    parser.add_argument("--model", type=str, default="hynet", help="Segmentation model (hynet, hynet_frozen, hynet_decoder, hynet_sum, hynet_nogate, hynet_res, hynet_par, ynet_raw, harm_unet, unet, attunet)")
     parser.add_argument("--both", default=False, help="Train/Test both HarmNet and HY-Net", **flag)
     parser.add_argument("--fine_tune", default=False, help="Fine tune HY-Net", **flag)
 
@@ -40,6 +40,7 @@ def get_args(add_arguments=None):
     # Photometric perturbations (see hynet.perturb)
     parser.add_argument("--augment", default=False, help="Random photometric augmentation (illumination ramp, gamma, blur, noise, JPEG) of the segmentation training images", **flag)
     parser.add_argument("--scale_aug", type=float, default=0.0, help="Random zoom of the segmentation training images and masks by a log-uniform factor in [1/F, F], applied with probability 1/2 (F in (1, 2]; 0 = off)")
+    parser.add_argument("--small_weight", type=float, default=1.0, help="Weight of the pixels of the organoids smaller than 200 px (at 480x640) in the segmentation loss (1 = off)")
     parser.add_argument("--augment_range", type=str, default="default", choices=("default", "wide"), help="Ranges of the --augment levels: 'wide' contains every level of the robustness sweep")
     parser.add_argument("--perturb", type=str, default=None, help="Perturb every image of the segmentation datasets, as 'name:level' (gamma, noise, blur, shading, jpeg), e.g. noise:0.05")
 
@@ -47,6 +48,7 @@ def get_args(add_arguments=None):
     parser.add_argument("--consist", type=float, default=0.0, help="Weight of the loss that makes the prediction identical on two random photometric views of the same image (0 = off)")
     parser.add_argument("--consist_harm", type=float, default=0.0, help="Weight of the same consistency on the harmonized image of the models with HarmNet (0 = off)")
     parser.add_argument("--consist_target", default=False, help="Draw half of the consistency images from the unlabeled images of the test wells (the masks of the test domain are never read: transductive use)", **flag)
+    parser.add_argument("--consist_bn_eval", default=False, help="Run the consistency forward passes with BatchNorm in eval mode (running statistics, not updated by the perturbed views)", **flag)
     parser.add_argument("--consist_pairs", type=int, default=2, help="Image pairs of the consistency loss per optimizer step")
 
     # Paths & Directories

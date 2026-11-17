@@ -41,7 +41,7 @@ def train_segmentation(args, model, train_loader, val_loader, device, weights_pa
 
     start_time = timer()
     for epoch in range(args.epochs):
-        train_loss = training(model, train_loader, criterion, optimizer, device, scaler, args.micro_batches, consistency)
+        train_loss = training(model, train_loader, criterion, optimizer, device, scaler, args.micro_batches, consistency, args.small_weight)
         val_metrics = validation(model, val_loader, criterion, device, evaluator)
 
         print(f"Epoch [{epoch+1}/{args.epochs}] "

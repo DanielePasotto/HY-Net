@@ -26,17 +26,35 @@ def _forever(loader):
 
 class Consistency:
     """Draws pairs from `loader` (batch of one pair) and computes the weighted consistency loss of a model."""
-    def __init__(self, loader, w_seg, w_harm, pairs=2):
+    def __init__(self, loader, w_seg, w_harm, pairs=2, bn_eval=False):
         self.batches = _forever(loader)
-        self.w_seg, self.w_harm, self.pairs = w_seg, w_harm, pairs
+        self.w_seg, self.w_harm, self.pairs, self.bn_eval = w_seg, w_harm, pairs, bn_eval
+
+    def _forward(self, model, x):
+        forward = getattr(model, "forward_proc", None)
+        return forward(x) if forward else (model(x), None)
 
     def loss(self, model, device):
         v1, v2 = next(self.batches)
         x = torch.cat((v1, v2)).to(device)  # both views in one batch
-        forward = getattr(model, "forward_proc", None)
-        out, proc = forward(x) if forward else (model(x), None)
-        prob = torch.sigmoid(out.float())
-        total = self.w_seg * F.mse_loss(prob[:len(v1)], prob[len(v1):])
+        if self.w_seg == 0 and hasattr(model, "harmnet"):
+            # only the harmonizer sees the views: the Y-Net is not run, so its BatchNorm statistics never include the perturbed images
+            out, proc = None, model.harmnet(x)
+        elif self.bn_eval:  # BatchNorm uses its running statistics and does not update them with the perturbed views
+            bns = [m for m in model.modules() if isinstance(m, torch.nn.modules.batchnorm._BatchNorm) and m.training]
+            for m in bns:
+                m.eval()
+            try:
+                out, proc = self._forward(model, x)
+            finally:
+                for m in bns:
+                    m.train()
+        else:
+            out, proc = self._forward(model, x)
+        total = x.new_zeros(())
+        if self.w_seg > 0:
+            prob = torch.sigmoid(out.float())
+            total = total + self.w_seg * F.mse_loss(prob[:len(v1)], prob[len(v1):])
         if proc is not None and self.w_harm > 0:
             proc = proc.float()
             total = total + self.w_harm * F.mse_loss(proc[:len(v1)], proc[len(v1):])
@@ -49,4 +67,4 @@ def make_consistency(args, source_paths, target_paths=()):
     weights = [(1 - share) / len(source_paths)] * len(source_paths) + [share / max(len(target_paths), 1)] * len(target_paths)
     sampler = WeightedRandomSampler(weights, num_samples=100000, replacement=True)
     loader = DataLoader(PairDataset(paths, args.augment_range), batch_size=1, sampler=sampler)
-    return Consistency(loader, args.consist, args.consist_harm, args.consist_pairs)
+    return Consistency(loader, args.consist, args.consist_harm, args.consist_pairs, args.consist_bn_eval)
