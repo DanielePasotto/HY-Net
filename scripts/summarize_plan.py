@@ -25,6 +25,10 @@ GROUPS = {
     "Ka": ("campeod", "CAMPEOD, scale + augment", "Ya"),
     "Wy": ("ynet_raw", "scale + wide augment", "Ya"),
     "Wr": ("hynet_res", "scale + wide augment", "Wy"),
+    "Wh": ("hynet_fast", "half-resolution HarmNet, wide augment", "Wr"),
+    "Kw": ("campeod", "CAMPEOD, scale + wide augment", "Ka"),
+    "Nn": ("nnunet", "nnU-Net 2D, 100 epochs (not balanced)", None),
+    "Zs": ("orgasegment_zeroshot", "OrgaSegment released weights", None),
 }
 
 
@@ -56,7 +60,8 @@ def main():
             sm = f"{sum(x[0] for x in small) / len(small):.0f}/{sum(x[1] for x in small) / len(small):.0f}" if small else ""
             print(f"{tag:5s}{model:10s}{label:38s}" + "".join(f"{vals[s][0]:8.2f}" if vals[s] else f"{'-':>8s}" for s in args.seeds) + f"{mean:8.2f}{len(ok):3d}   {sm}")
         print("paired difference to the reference of the family (same seeds only):")
-        pairs = [(tag, ref) for tag, (_, _, ref) in GROUPS.items() if ref is not None] + [("Nx", "Rc"), ("Sx", "Rc"), ("Rc", "Rx"), ("Ua", "augsc"), ("Ka", "augsc"), ("Ra", "augsc")]
+        pairs = [(tag, ref) for tag, (_, _, ref) in GROUPS.items() if ref is not None] + [("Nx", "Rc"), ("Sx", "Rc"), ("Rc", "Rx"), ("Ua", "augsc"), ("Ka", "augsc"), ("Ra", "augsc"),
+                                                                                                          ("Kw", "Wr"), ("Nn", "Wr"), ("Zs", "Wr"), ("Wr", "Ra"), ("Nn", "Ra"), ("Zs", "Ra"), ("Nn", "Ka")]
         for tag, ref in pairs:
             common = sorted(set(cells[tag]) & set(cells[ref]))
             if common:

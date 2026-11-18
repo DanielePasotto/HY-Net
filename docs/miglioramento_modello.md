@@ -191,7 +191,7 @@ Da fare: analisi delle macchie su B (`scripts/measure_harm_delta.py`, `scripts/a
 - Una sola impostazione di iperparametri per ogni esperimento (F=2, 0,5 di scala residua, pesi 5/5).
 - Lo spazio di ricerca è stato guidato soprattutto da OrganoID: non è dimostrato che le conclusioni valgano per `ours` e `orgaseg`.
 - I confronti equi con CAMPEOD e U-Net (fine della sezione 12) hanno due semi; i numeri di CAMPEOD della sezione 2 sono a un solo seme e senza scala né augmentation.
-- Il lavoro è tutto non committato nel repository.
+- Il codice è nel repository (ramo wip/model-improvement); gli script in aselines/ e slurm/ e le cartelle CAMPEOD/ e outputs/ non sono versionati.
 
 ## 10. Codice rimosso (pulizia del 2026-11-13)
 
@@ -326,7 +326,7 @@ Dice per pozzetto, media dei semi 42 e 43 (valori per seme tra parentesi):
 |---|---|---|---|
 | Y-Net grezzo (Ya; su OrganoID: E, 3 semi) | 87,95 (87,03 / 88,88) | 87,29 (87,22 / 87,36) | 81,98 (82,13 / 81,47 / 82,35) |
 | `hynet_res` (Ra) | 86,55 (86,71 / 86,38) | 87,16 (87,20 / 87,11) | 82,85 (81,87 / 83,83) |
-| `hynet_res`, augment ampia (Wr) | 87,38 (87,49 / 87,26) | 87,45 (87,12 / 87,79) | non provato |
+| `hynet_res`, augment ampia (Wr) | 87,38 (87,49 / 87,26) | 87,45 (87,12 / 87,79) | 81,46 (81,18 / 81,74), provato il 2026-11-18 |
 | CAMPEOD (Ka) | 87,74 (86,87 / 88,61) | 87,13 (87,41 / 86,85) | 83,85 (83,73 / 83,96) |
 | U-Net (Ua) | 85,85 (86,54 / 85,16) | 87,14 (87,10 / 87,19) | 80,52 (80,39 / 80,64) |
 
@@ -338,7 +338,7 @@ Letture:
 - **Il numero di CAMPEOD in tabella 2 non è più il riferimento**: con la ricetta completa CAMPEOD sale sul nostro dataset a 87,74 (dai 83,35 senza scala e augmentation), mentre su `orgaseg` resta a 87,13 (86,97 prima).
 - **Cosa resta in vantaggio a HY-Net:** nessun guadagno di accuratezza misurabile. Il punto di forza dimostrato è la robustezza (sezione precedente) e il costo, ma il costo non è stato misurato in questo ciclo (parametri, tempo per epoca: da rilevare per il paper).
 
-Cautele: due semi (tre solo per la riga E); il seme 43 di Ka, Ua e Ra gira su una GPU diversa dal seme 42 (l'effetto della GPU misurato è piccolo, vedi sopra); il riferimento E di OrganoID ha anche il seme 44, ma le differenze appaiate usano solo 42 e 43; Wr non è stato provato su OrganoID; la robustezza di Ka e Ua non è stata misurata; nessun intervallo di confidenza sulle differenze tra modelli; scelte di ricetta fatte guardando i domini di test.
+Cautele: due semi (tre solo per la riga E); il seme 43 di Ka, Ua e Ra gira su una GPU diversa dal seme 42 (l'effetto della GPU misurato è piccolo, vedi sopra); il riferimento E di OrganoID ha anche il seme 44, ma le differenze appaiate usano solo 42 e 43; Wr su OrganoID è stato provato il 2026-11-18 (ultima sezione); la robustezza di Ka e Ua non è stata misurata; nessun intervallo di confidenza sulle differenze tra modelli; scelte di ricetta fatte guardando i domini di test.
 
 ### Robustezza di CAMPEOD e U-Net, e costo dei modelli (2026-11-17)
 
@@ -361,7 +361,7 @@ Il Y-Net grezzo Ya (con augmentation di default, come CAMPEOD) supera CAMPEOD su
 
 Letture:
 - **CAMPEOD è fragile alla sfocatura** (blur 4: 50,2 su `ours`, 74,4 su `orgaseg`) e al rumore forte su `orgaseg` (noise 0,1: 84,0). Questo spiega quasi tutto il vantaggio di robustezza di HY-Net e anche degli altri modelli senza CAMPEOD; non è specifico di HarmNet. Probabilmente dipende anche dal ridimensionamento a 512x512 dell'ingresso di CAMPEOD (non verificato).
-- **Il confronto non è del tutto equo a favore di HY-Net**: Wr è addestrato con l'augmentation ampia, CAMPEOD con quella di default; CAMPEOD con augmentation ampia non è stato provato. Il confronto equo sullo stesso range è Ya contro Ka (sopra), dove il vantaggio esiste ma è più piccolo su `orgaseg`.
+- **Il confronto non è del tutto equo a favore di HY-Net**: Wr è addestrato con l'augmentation ampia, CAMPEOD con quella di default; CAMPEOD con augmentation ampia (Kw) è stato provato il 2026-11-18: vedi l'ultima sezione. Il confronto equo sullo stesso range è Ya contro Ka (sopra), dove il vantaggio esiste ma è più piccolo su `orgaseg`.
 - **Cosa si può dire nel paper:** a Dice pulito pari (entro 0,4 sui domini intestinali), HY-Net con augmentation ampia è molto più robusto di CAMPEOD alla sfocatura e al rumore forte, perde poco o nulla su gamma, ombreggiatura e JPEG, e ha un quinto dei parametri. Il merito dell'armonizzatore residuo isolato resta quello della sezione precedente (Wr meno Wy: da +0,6 a +1,2 sulla media delle perturbate).
 
 Costo (RTX 3060, job `bench_cost` 2354 e `bench_cam` 2355, `hynet-benchmark`, 5 iterazioni cronometrate con AMP; la durata per epoca è un'estrapolazione a 195 immagini):
@@ -371,6 +371,75 @@ Costo (RTX 3060, job `bench_cost` 2354 e `bench_cam` 2355, `hynet-benchmark`, 5 
 | U-Net | 31,0 M | 58 ms | 4,25 GB | 0,31 (4) |
 | Y-Net grezzo | 36,1 M | 88 ms | 4,10 GB | 0,49 (2) |
 | `hynet_res` e `hynet` | 37,5 M | 133 ms | 6,17 GB | 0,73 (2) |
+| `hynet_fast` (HarmNet a metà risoluzione, misurato il 2026-11-17, job 2358) | 37,5 M | 100 ms | 4,64 GB | 0,55 (2) |
 | CAMPEOD | 177,1 M | 117 ms | 5,33 GB | 0,77 (1); a batch 4 esaurisce la memoria |
 
 CAMPEOD ha 4,7 volte i parametri di HY-Net ma l'inferenza è più veloce (117 contro 133 ms): il vantaggio di HY-Net è sui parametri, non sulla velocità. I tempi per epoca sono a batch diversi (quello usato nel LODO è 4 con accumulo: 2 passi da 2 per i modelli con HarmNet, 4 da 1 per CAMPEOD), quindi vanno letti come ordine di grandezza.
+
+### Studio completo: HarmNet più veloce, CAMPEOD con augmentation ampia, nnU-Net e OrgaSegment (2026-11-18)
+
+Quattro aggiunte al confronto, lanciate il 2026-11-17 e concluse la mattina del 2026-11-18. Il riepilogo è `scripts/summarize_plan.py --domains ours orgaseg organoid --seeds 42 43` (gruppi nuovi Wh, Kw, Nn, Zs) e `scripts/summarize_robustness.py` per la sweep; radici `outputs/lodo_{Wh,Kw}[_s43]`, `outputs/lodo_Nn`, `outputs/lodo_Zs`, `outputs/robustness/lodo_{Wh,Kw}_<dominio>[_s43]`, job 2359-2383.
+
+**1. `hynet_fast`: HarmNet residuo a metà risoluzione (tag Wh).** In `ResidualHarmNet` l'ingresso passa da un `avg_pool2d` di fattore 2, HarmNet lavora a quella risoluzione e la correzione prevista viene interpolata (bilineare) a piena risoluzione e sommata all'immagine; resta l'identità all'inizio (la correzione parte da zero), i parametri sono gli stessi di `hynet_res` (37,5 M). Costa circa un quarto delle operazioni di HarmNet. Velocità e memoria sono nella tabella dei costi sopra: inferenza fp32 da 133 a 100 ms (-25%), fp16 da 76 a 57 ms, memoria di picco in addestramento da 6,17 a 4,64 GB, 0,55 contro 0,73 min per epoca. Con `torch.compile` l'inferenza fp32 scende a 79 ms (fp16 37,5 ms), mentre `channels_last` non aiuta (HarmNet usa InstanceNorm). Opzioni aggiunte a `hynet-benchmark`: `--channels_last` e `--compile`. Stessa ricetta di Wr (scala 2, augmentation ampia), `ours` e `orgaseg`, semi 42 e 43, tutte sulle 3060.
+
+| | `ours` s42 / s43 / media | `orgaseg` s42 / s43 / media |
+|---|---|---|
+| Wr: `hynet_res` | 87,49 / 87,26 / 87,38 | 87,12 / 87,79 / 87,45 |
+| Wh: `hynet_fast` | 86,28 / 87,60 / 86,94 | 86,73 / 87,60 / 87,17 |
+| Wh meno Wr (per seme) | -1,21 / +0,34 (media -0,44) | -0,38 / -0,19 (media -0,29) |
+
+Robustezza di Wh meno Wr (sui pozzetti, semi insieme, IC bootstrap al 95%): pulito -0,44 [-0,61, -0,25] su `ours` e -0,29 [-0,38, -0,20] su `orgaseg`; media delle perturbate -0,65 [-0,86, -0,45] e -0,19 [-0,26, -0,11]. La perdita è maggiore con la sfocatura su `ours` (blur 2: -1,11; blur 4: -2,51, cioè 80,3 contro 82,8) e quasi nulla altrove; su `orgaseg` Wh perde meno di Wr rispetto al pulito (+0,10 [+0,07, +0,13]).
+
+Lettura: `hynet_fast` costa circa 0,3-0,4 punti di Dice pulito (dentro il rumore tra semi, che su `ours` è circa 2,5 punti, ma coerente in segno su 3 celle su 4) e un po' di robustezza alla sfocatura forte, in cambio del 25% di inferenza in meno e del 25% di memoria in meno. È una scelta di compromesso, non un guadagno: Wr resta la configurazione di riferimento per l'accuratezza e la robustezza, Wh è quella da usare se la latenza conta. Non provato: il fattore 4 (`harm_down=4`), un `hynet_fast` con ricetta di robustezza propria, Wh su OrganoID.
+
+**2. CAMPEOD con augmentation ampia (tag Kw) e Wr su OrganoID.** Per rendere il confronto con Wr equo (stessa augmentation) ho addestrato CAMPEOD con scala 2 e `--augment_range wide`, tre domini, semi 42 e 43 (`MICRO=4`, sulle 3060), con robustezza su `ours` e `orgaseg`. Ho anche provato Wr su OrganoID (job 2375 e 2376, eseguiti su `claudio`).
+
+| Dice per pozzetto | `ours` s42 / s43 / media | `orgaseg` s42 / s43 / media | `organoid` s42 / s43 / media |
+|---|---|---|---|
+| Ka: CAMPEOD, augment di default | 86,87 / 88,61 / 87,74 | 87,41 / 86,85 / 87,13 | 83,73 / 83,96 / 83,85 |
+| Kw: CAMPEOD, augment ampia | 85,64 / 85,96 / 85,80 | 87,34 / 87,95 / 87,64 | 84,55 / 82,77 / 83,66 |
+| Wr: `hynet_res`, augment ampia | 87,49 / 87,26 / 87,38 | 87,12 / 87,79 / 87,45 | 81,18 / 81,74 / 81,46 |
+| Kw meno Ka | -1,23 / -2,65 (media -1,94) | -0,08 / +1,10 (media +0,51) | +0,82 / -1,19 (media -0,19) |
+| Kw meno Wr | -1,85 / -1,31 (media -1,58) | +0,22 / +0,16 (media +0,19) | +3,37 / +1,03 (media +2,20) |
+| Wr meno Ra (stessa architettura, augment ampia contro di default) | +0,83 | +0,30 | -1,39 |
+
+Robustezza (media delle perturbate, 2 semi; Dice a immagine pulita tra parentesi):
+
+| | `ours` | `orgaseg` |
+|---|---|---|
+| Wr | 86,32 (87,38) | 87,16 (87,45) |
+| Wh | 85,66 (86,94) | 86,97 (87,17) |
+| Kw (CAMPEOD, ampia) | 83,51 (85,80) | 86,95 (87,64) |
+| Ka (CAMPEOD, default) | 84,10 (87,74) | 85,88 (87,13) |
+| blur 4: Wr / Wh / Kw / Ka | 82,78 / 80,27 / 64,74 / 50,16 | 85,90 / 85,65 / 80,53 / 74,43 |
+
+Kw meno Wr, sulla sweep: media delle perturbate -2,81 [-3,22, -2,45] su `ours` e -0,21 [-0,36, -0,05] su `orgaseg`; blur 4 -18,0 e -5,4.
+
+Letture:
+- **L'augmentation ampia aiuta CAMPEOD alla sfocatura** (blur 4 da 50,2 a 64,7 su `ours`, da 74,4 a 80,5 su `orgaseg`; noise 0,1 su `orgaseg` da 84,0 a 87,1) ma non lo porta al livello di Wr, che a blur 4 è 82,8 e 85,9. Quindi la fragilità alla sfocatura è in parte dovuta all'augmentation, in parte all'architettura (o al ridimensionamento a 512x512 dell'ingresso, non verificato).
+- **Sul pulito CAMPEOD con augmentation ampia non è migliore:** peggiora su `ours` (-1,94 rispetto a Ka, due semi in segno concorde), migliora un poco su `orgaseg` (+0,51, segno discordante tra semi), pari su OrganoID. Il riferimento di accuratezza di CAMPEOD resta Ka per `ours` e OrganoID; su `orgaseg` Ka e Kw sono dentro il rumore.
+- **Confronto equo (stessa augmentation ampia), Dice pulito:** Wr batte CAMPEOD di 1,58 punti su `ours` (positivo nei due semi, IC sui pozzetti [+1,26, +1,91]), è pari su `orgaseg` (CAMPEOD +0,19), mentre su OrganoID CAMPEOD è sopra di 2,20. Con ciascun modello alla sua augmentation migliore sul pulito (Ka su `ours`, Kw su `orgaseg`, Ka su OrganoID) CAMPEOD resta pari o sopra: 87,74 contro 87,38 su `ours`, 87,64 contro 87,45 su `orgaseg`, 83,85 contro 82,85 (Ra) su OrganoID.
+- **L'augmentation ampia peggiora OrganoID per `hynet_res`** (Wr meno Ra -1,39, negativo in entrambi i semi), come già visto per Y-Net sul pulito (Wy meno Ya): costa in-domain. Per OrganoID la ricetta di Ra resta la migliore.
+
+**3. nnU-Net v2 (tag Nn) e OrgaSegment (tag Zs).** Prima di questo ciclo non erano nel confronto LODO (nnU-Net era solo nella validazione incrociata a 5 fold della versione precedente del lavoro).
+
+Setup: nnU-Net v2 2D, `nnUNetTrainer_100epochs`, piano automatico (U-Net a 8 stadi, patch 512x512, batch 12, normalizzazione z-score, `batch_dice`); un solo fold per dominio di test, un solo seme. I tre fold usano lo split del LODO: il dominio di test è la validazione e gli altri due domini sono l'addestramento (conteggi immagini di addestramento / test: `ours` 2684 / 329, `orgaseg` 2730 / 231, `organoid` 414 / 32), costruiti da `folds/lodo_<dominio>.json` (script `baselines/nnunet/prepare_pool.py`, dataset `Dataset502_Pool`). Le predizioni sono riconvertite con `baselines/nnunet/collect.py` e valutate con `hynet-evaluate`, quindi la metrica per pozzetto è la stessa degli altri modelli. nnU-Net non bilancia i domini (usa il pool com'è, mentre gli altri modelli campionano in modo bilanciato) e usa la sua augmentation, non la nostra scala 2: va dichiarato. OrgaSegment: pesi rilasciati dagli autori, nessun addestramento (`baselines/orgasegment/zeroshot.py`), valutazione sulle stesse immagini di test.
+
+| Dice per pozzetto | `ours` | `orgaseg` | `organoid` |
+|---|---|---|---|
+| nnU-Net (Nn), 1 seme | 87,09 | 88,87 | 83,11 |
+| OrgaSegment zero-shot (Zs) | 70,73 | 90,86 (contaminata, vedi sotto) | 79,93 |
+| Wr: `hynet_res`, augment ampia (2 semi) | 87,38 | 87,45 | 81,46 |
+| Ra: `hynet_res`, augment di default (2 semi) | 86,55 | 87,16 | 82,85 |
+| Ka: CAMPEOD, augment di default (2 semi) | 87,74 | 87,13 | 83,85 |
+
+Differenze (nnU-Net con il seme 42 contro la media dei due semi degli altri): Nn meno Wr -0,40 su `ours`, +1,75 su `orgaseg`, +1,94 su `organoid`; Nn meno Ra +0,37, +1,66, +1,24; Nn meno Ka +0,22, +1,45, -0,62. Richiamo/precisione sotto 200 px (nnU-Net): 55/64 su `ours`, 88/44 su `orgaseg`, 60/20 su `organoid`.
+
+Letture:
+- **nnU-Net è il baseline più forte su `orgaseg`** (88,87, circa 1,5-1,8 punti sopra HY-Net e CAMPEOD) e pari a tutti su `ours` (87,09, dentro il rumore tra semi) e su OrganoID (83,11, tra Ra e Ka). Un solo seme: la differenza su `orgaseg` è più piccola del rumore osservato su `ours` ma coerente con il fatto che su `orgaseg` gli altri modelli oscillano di meno (circa 0,5 punti tra semi). Va letta come "nnU-Net non è battuto su `orgaseg`".
+- **OrgaSegment zero-shot** non generalizza al nostro dominio (70,73, richiamo degli oggetti piccoli 23%) né a OrganoID (79,93, sotto Ra e Ka di circa 3-4 punti). Sul proprio dominio (`orgaseg`) arriva a 90,86, ma quella cella non è un test pulito: i pesi rilasciati sono stati addestrati su una parte delle immagini di OrgaSegment, e non ho verificato quanto si sovrappongano con le 231 immagini del nostro test. Non si può confrontare con gli altri modelli su quel dominio; si può citare come limite superiore, con la contaminazione dichiarata. Il confronto significativo è sugli altri due domini, dove HY-Net e gli altri modelli addestrati sul pool lo battono di 3-17 punti.
+- **Messaggio per il paper, aggiornato:** HY-Net (Wr) è a pari dei modelli forti sui domini intestinali (entro 0,4 su `ours` da Ka e nnU-Net; su `orgaseg` 1,4-1,8 sotto nnU-Net, a pari con CAMPEOD), sotto di 1-2,4 su OrganoID (dove l'augmentation ampia peggiora), ha 4,7 volte meno parametri di CAMPEOD e batte U-Net sul nostro dataset. Non si può dire che batta i competitor in accuratezza; i punti di forza dimostrati sono la robustezza a sfocatura e rumore forte rispetto a CAMPEOD e Ka (e il merito isolato dell'armonizzatore residuo su Y-Net, Wr meno Wy) e il costo in parametri. La robustezza di nnU-Net non è stata misurata.
+
+**Hardware di questo ciclo (da dichiarare).** Wh e Kw: solo RTX 3060 (geppetto e geminio). Wr su OrganoID (job 2375, 2376), nnU-Net su `ours` (2380) e OrgaSegment zero-shot (2383): RTX 5070 Ti (`claudio`), spostati lì il 2026-11-17 su richiesta; nnU-Net su `orgaseg` (2381) e su `organoid` (2382): RTX 3060. Insieme alle celle già note del seme 43 di Ya, Ha, Ra, Pa, Nx, Sx, Ka, Ua (sezioni precedenti), il paper deve dichiarare entrambe le GPU.
+
+**Cautele.** Due semi per Wh, Kw, Wr; un seme per nnU-Net e OrgaSegment; l'effetto del seme su `ours` è circa 2,5 punti, quindi le differenze sotto 1 punto su `ours` non sono distinguibili; gli IC sono sui pozzetti, non sui semi; nnU-Net non ha augmentation né campionamento uguali agli altri; la cella di OrgaSegment su `orgaseg` è contaminata; la scelta delle ricette è stata fatta guardando i domini di test; non è stata misurata la robustezza di nnU-Net e OrgaSegment né il costo di nnU-Net.
