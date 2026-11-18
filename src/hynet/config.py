@@ -27,13 +27,13 @@ def get_args(add_arguments=None):
     parser.add_argument("--fold", type=int, default=0, help="Fold index used with --folds_file")
     parser.add_argument("--runs_root", type=str, default="outputs/runs", help="Where the weights of the cross-validation runs are saved")
 
-    # Few-shot adaptation to another dataset (see docs/experiments.md, section 3)
+    # Few-shot adaptation to another dataset
     parser.add_argument("--init_weights", type=str, default=None, help="Start the segmentation model from these weights (e.g. a model trained on another dataset) instead of from scratch")
     parser.add_argument("--n_train", type=int, default=None, help="With --folds_file: train on a random subset of this many wells of the fold's training set")
     parser.add_argument("--n_val", type=int, default=None, help="With --folds_file: validate on a random subset of this many wells of the fold's validation set")
     parser.add_argument("--subset_seed", type=int, default=0, help="Seed of the subsets drawn by --n_train/--n_val (same seed: nested subsets)")
 
-    # Training on datasets pooled from several sources (see docs/experiments.md, section 4)
+    # Training on datasets pooled from several sources
     parser.add_argument("--domain_balance", default=False, help="Draw the training samples with the same probability from every domain (the IMG_<domain>-<id> prefix of the file names)", **flag)
     parser.add_argument("--samples_per_epoch", type=int, default=None, help="Samples drawn per epoch with --domain_balance (default: the size of the training set)")
 

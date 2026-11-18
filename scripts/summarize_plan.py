@@ -1,4 +1,4 @@
-"""Per-well organoid Dice of the groups of the 2026-11-15 plan (docs/miglioramento_modello.md, section 12), per test domain and seed.
+"""Per-well organoid Dice of the groups of the 2026-11-15 plan, per test domain and seed.
 
 Run from the repository root on the machine with the outputs:  python scripts/summarize_plan.py [--domains ours orgaseg] [--seeds 42 43 44]
 Reads outputs/lodo_<tag>[_s43|_s44]/<domain>/eval/<model>/fold0/summary.json. A cell that is not finished is shown as '-'.
