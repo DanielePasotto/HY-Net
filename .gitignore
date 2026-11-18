@@ -64,3 +64,6 @@ slurm/
 # tool working folders (knowledge graph, model debates)
 .ua/
 .duel/
+
+# local write-ups (kept out of the repository)
+docs/
