@@ -4,7 +4,7 @@ import os
 
 from hynet import data, perturb
 from hynet.evaluation import well_id
-from hynet.folds import load_folds, fold_wells, subset_wells
+from hynet.folds import load_folds, fold_wells
 
 def run_tag(args, split="test"):
     return f"fold{args.fold}" if args.folds_file else split
@@ -36,8 +36,6 @@ def segmentation_dataset(args, role, train=False):
     if not args.folds_file:
         return data.OrganoidDataset(os.path.join(args.dataset_path, role), **kwargs)
     wells = fold_wells(load_folds(args.folds_file), args.fold, role)
-    if role in ("train", "val"):  # --n_train/--n_val: few-shot fine-tuning on a random subset of the wells
-        wells = subset_wells(wells, getattr(args, f"n_{role}"), args.subset_seed)
     return data.OrganoidDataset(samples=_select(data.pool_segmentation_samples(args.dataset_path), wells, role), **kwargs)
 
 def harmonization_dataset(args, role):

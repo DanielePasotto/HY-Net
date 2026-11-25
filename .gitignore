@@ -38,7 +38,6 @@ src/hynet/models/campeod.py
 src/hynet/models/macpnet.py
 
 # third-party code and software of the compared methods: not part of this repository (clone them next to it to run the optional comparisons)
-BortenMA_OrganoSeg_FileS1/
 CAMPEOD/
 MACPnet/
 OrganoID/

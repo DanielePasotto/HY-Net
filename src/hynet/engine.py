@@ -3,7 +3,6 @@ import random
 import numpy as np
 import torch
 import torch.nn.functional as F
-from hynet.losses import small_object_weights
 from hynet.metrics import calculate_harmonization_metrics
 from tqdm import tqdm
 
@@ -45,11 +44,9 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
 
-def training(model, loader, criterion, optimizer, device, scaler=None, micro_batches=1, consistency=None, small_weight=1.0):
+def training(model, loader, criterion, optimizer, device, scaler=None, micro_batches=1):
     """One epoch. With a `torch.amp.GradScaler` the forward pass runs in fp16 autocast (the loss is always computed in fp32).
 
-    `small_weight` > 1 weights the pixels of the organoids smaller than 200 px (hynet.losses.small_object_weights) in the segmentation loss.
-    `consistency` (hynet.consistency.Consistency) adds the unsupervised consistency loss of `consistency.pairs` image pairs to every step.
     With `micro_batches` > 1 every batch is split into that many chunks whose gradients are accumulated before a single optimizer step:
     the same batch size with a lower peak memory (BatchNorm statistics are computed per chunk).
     """
@@ -71,8 +68,6 @@ def training(model, loader, criterion, optimizer, device, scaler=None, micro_bat
             if len(chunk) == 3:
                 targets = chunk[2].to(device)
                 loss, _ = criterion(outputs, targets, masks, inputs)
-            elif small_weight > 1:
-                loss = criterion(outputs, masks, small_object_weights(masks, small_weight))
             else:
                 loss = criterion(outputs, masks)
 
@@ -81,13 +76,6 @@ def training(model, loader, criterion, optimizer, device, scaler=None, micro_bat
             else:
                 (loss * weight).backward()
             batch_loss += loss.item() * weight
-
-        if consistency is not None:  # unsupervised term, one pair at a time (same peak memory as a chunk)
-            for _ in range(consistency.pairs):
-                with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
-                    loss_c = consistency.loss(model, device) / consistency.pairs
-                (scaler.scale(loss_c) if amp else loss_c).backward()
-                batch_loss += loss_c.item()
 
         if amp:
             scaler.step(optimizer)

@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 from .hynet import DoubleConv, AttentionBlock
-from .harmnet import HarmNet
 
 class UNet(nn.Module):
     """U-Net built from the same DoubleConv / AttentionBlock modules as HY-Net, so that capacity and normalization are comparable.
@@ -50,15 +49,3 @@ class UNet(nn.Module):
 class AttentionUNet(UNet):
     def __init__(self, in_channels=1, out_channels=1, features=(64, 128, 256, 512)):
         super().__init__(in_channels, out_channels, features, attention=True)
-
-class HarmUNet(nn.Module):
-    """HarmNet -> single-stream U-Net on the harmonized image only (ablation: harmonization without the dual-stream Y-Net)."""
-    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device, weights_path):
-        super().__init__()
-        self.harmnet = HarmNet(input_shape, hidden_units, input_shape).to(device)
-        if weights_path is not None:
-            self.harmnet.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
-        self.unet = UNet(input_shape, output_shape).to(device)
-
-    def forward(self, x):
-        return self.unet(self.harmnet(x))

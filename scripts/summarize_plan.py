@@ -1,34 +1,31 @@
-"""Per-well organoid Dice of the groups of the 2026-11-15 plan, per test domain and seed.
+"""Per-well organoid Dice of the leave-one-dataset-out runs of the paper, per test domain and seed.
 
-Run from the repository root on the machine with the outputs:  python scripts/summarize_plan.py [--domains ours orgaseg] [--seeds 42 43 44]
-Reads outputs/lodo_<tag>[_s43|_s44]/<domain>/eval/<model>/fold0/summary.json. A cell that is not finished is shown as '-'.
+Run from the repository root on the machine with the outputs:  python scripts/summarize_plan.py [--domains ours orgaseg organoid] [--seeds 42 43 44]
+Reads outputs/lodo_<tag>[_s43|_s44]/<domain>/eval/<model>/fold0/summary.json (ROOT of scripts/lodo.sh). A cell that is not finished is shown as '-'.
 Also prints the paired difference of every group with respect to the reference of its family (per seed and mean), and the instance recall/precision of the smallest size bin.
 """
 import argparse
 import json
 import os
 
-# tag -> (model, label, reference tag of its family). Rc = the Rx recipe run again on claudio (RTX 5070 Ti), the reference of the Nx/Sx jobs that ran there;
-# "Rc - Rx" is the effect of the GPU alone.
+# tag -> (model, label, reference tag of its family). "a" = default photometric augmentation, "w" = wide; all with the random zoom (SCALE=2).
 GROUPS = {
-    "Rx": ("ynet_raw", "scale", None),
-    "Rc": ("ynet_raw", "scale (repeated on claudio)", None),
-    "Cx": ("ynet_raw", "scale + consistency (test images)", "Rx"),
-    "Nx": ("ynet_raw", "scale, trained without OrganoID", "Rx"),
-    "Sx": ("ynet_raw", "scale + small-object weight 4", "Rx"),
-    "Ya": ("ynet_raw", "scale + augment", None),
-    "Ha": ("hynet", "scale + augment", "Ya"),
-    "Ra": ("hynet_res", "scale + augment", "Ya"),
-    "Pa": ("hynet_par", "scale + augment + harm consistency", "Ya"),
-    "augsc": ("ynet_raw", "scale + augment (E, organoid test)", None),
-    "Ua": ("unet", "U-Net, scale + augment", "Ya"),
-    "Ka": ("campeod", "CAMPEOD, scale + augment", "Ya"),
-    "Wy": ("ynet_raw", "scale + wide augment", "Ya"),
-    "Wr": ("hynet_res", "scale + wide augment", "Wy"),
-    "Wh": ("hynet_fast", "half-resolution HarmNet, wide augment", "Wr"),
-    "Kw": ("campeod", "CAMPEOD, scale + wide augment", "Ka"),
+    "Ya": ("ynet_raw", "Y-Net without HarmNet, augment", None),
+    "Ha": ("hynet", "HY-Net pre-trained HarmNet, augment", "Ya"),
+    "Ra": ("hynet_res", "HY-Net, augment", "Ya"),
+    "Ua": ("unet", "U-Net, augment", "Ya"),
+    "Ka": ("campeod", "CAMPEOD, augment", "Ya"),
+    "At": ("attunet", "Attention U-Net, augment", "Ua"),
+    "Mp": ("macpnet", "MACPnet, augment", "Ua"),
+    "Wy": ("ynet_raw", "Y-Net without HarmNet, wide augment", "Ya"),
+    "Wr": ("hynet_res", "HY-Net, wide augment", "Wy"),
+    "Wh": ("hynet_fast", "HY-Net half-resolution HarmNet, wide", "Wr"),
+    "Uw": ("unet", "U-Net, wide augment", None),
+    "Kw": ("campeod", "CAMPEOD, wide augment", "Ka"),
     "Nn": ("nnunet", "nnU-Net 2D, 100 epochs (not balanced)", None),
+    "Oi": ("organoid", "OrganoID U-Net, own recipe", None),
     "Zs": ("orgasegment_zeroshot", "OrgaSegment released weights", None),
+    "Zo": ("organoid_zeroshot", "OrganoID released weights", None),
 }
 
 
@@ -44,7 +41,7 @@ def load(tag, model, domain, seed):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--domains", nargs="+", default=["ours", "orgaseg"])
+    ap.add_argument("--domains", nargs="+", default=["ours", "orgaseg", "organoid"])
     ap.add_argument("--seeds", nargs="+", type=int, default=[42, 43, 44])
     args = ap.parse_args()
     for domain in args.domains:
@@ -60,8 +57,8 @@ def main():
             sm = f"{sum(x[0] for x in small) / len(small):.0f}/{sum(x[1] for x in small) / len(small):.0f}" if small else ""
             print(f"{tag:5s}{model:10s}{label:38s}" + "".join(f"{vals[s][0]:8.2f}" if vals[s] else f"{'-':>8s}" for s in args.seeds) + f"{mean:8.2f}{len(ok):3d}   {sm}")
         print("paired difference to the reference of the family (same seeds only):")
-        pairs = [(tag, ref) for tag, (_, _, ref) in GROUPS.items() if ref is not None] + [("Nx", "Rc"), ("Sx", "Rc"), ("Rc", "Rx"), ("Ua", "augsc"), ("Ka", "augsc"), ("Ra", "augsc"),
-                                                                                                          ("Kw", "Wr"), ("Nn", "Wr"), ("Zs", "Wr"), ("Wr", "Ra"), ("Nn", "Ra"), ("Zs", "Ra"), ("Nn", "Ka")]
+        pairs = [(tag, ref) for tag, (_, _, ref) in GROUPS.items() if ref is not None] + [("Wr", "Uw"), ("Wr", "Kw"), ("Wr", "Nn"), ("Wr", "Ra"), ("Kw", "Uw"),
+                                                                                                          ("Wr", "At"), ("Wr", "Mp"), ("Wr", "Oi"), ("Wr", "Zs"), ("Wr", "Zo")]
         for tag, ref in pairs:
             common = sorted(set(cells[tag]) & set(cells[ref]))
             if common:

@@ -66,14 +66,6 @@ def load_folds(path):
     check_folds(doc)
     return doc
 
-def subset_wells(wells, n, seed=0):
-    """`n` wells drawn at random (reproducibly) from `wells`; the subsets of increasing `n` with the same seed are nested. None keeps all."""
-    wells = sorted(wells)
-    if n is None or n >= len(wells):
-        return wells
-    order = np.random.default_rng(seed).permutation(len(wells))
-    return sorted(wells[i] for i in order[:n])
-
 def fold_wells(doc, fold, role):
     if not 0 <= fold < len(doc["folds"]):
         raise ValueError(f"Fold {fold} out of range (0..{len(doc['folds']) - 1})")

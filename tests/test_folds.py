@@ -52,12 +52,3 @@ def test_save_load_roundtrip(tmp_path):
 def test_too_few_units():
     with pytest.raises(ValueError):
         folds.make_folds({"A": 0.1, "B": 0.2})
-
-def test_subset_wells_nested_and_reproducible():
-    pool = [f"W{i}" for i in range(20)]
-    small, large = folds.subset_wells(pool, 4, seed=3), folds.subset_wells(pool, 10, seed=3)
-    assert len(small) == 4 and len(large) == 10
-    assert set(small) <= set(large) <= set(pool)
-    assert folds.subset_wells(pool, 4, seed=3) == small
-    assert folds.subset_wells(pool, 4, seed=4) != small
-    assert folds.subset_wells(pool, None) == folds.subset_wells(pool, 99) == sorted(pool)

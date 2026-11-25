@@ -11,7 +11,6 @@ from hynet.splits import segmentation_dataset, harmonization_dataset, weights_pa
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from hynet import data
 from hynet.config import get_args
-from hynet.consistency import make_consistency
 
 def training_loader(args, dataset):
     """Shuffled loader; with --domain_balance every domain of a pooled dataset is drawn with the same probability (with replacement)."""
@@ -20,14 +19,8 @@ def training_loader(args, dataset):
     sampler = WeightedRandomSampler(data.domain_weights(dataset.image_paths), num_samples=args.samples_per_epoch or len(dataset), replacement=True)
     return DataLoader(dataset, batch_size=args.batch_size, sampler=sampler)
 
-def train_segmentation(args, model, train_loader, val_loader, device, weights_path, consistency=None):
+def train_segmentation(args, model, train_loader, val_loader, device, weights_path):
     """Train a segmentation model (any of hynet.models.factory.MODELS) with the Tversky-BCE loss; the best validation mDICE is kept."""
-    if args.init_weights:
-        model.load_state_dict(torch.load(args.init_weights, map_location=device, weights_only=True))
-        print(f"### Model initialised from {args.init_weights} ###")
-    elif args.fine_tune:
-        model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
-        print("### Model loaded for fine-tuning ###")
     evaluator = SemanticEvaluator(num_classes=args.num_classes, device=device)
     criterion = TverskyBCELoss(args.alpha, args.beta).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
@@ -41,7 +34,7 @@ def train_segmentation(args, model, train_loader, val_loader, device, weights_pa
 
     start_time = timer()
     for epoch in range(args.epochs):
-        train_loss = training(model, train_loader, criterion, optimizer, device, scaler, args.micro_batches, consistency, args.small_weight)
+        train_loss = training(model, train_loader, criterion, optimizer, device, scaler, args.micro_batches)
         val_metrics = validation(model, val_loader, criterion, device, evaluator)
 
         print(f"Epoch [{epoch+1}/{args.epochs}] "
@@ -131,16 +124,10 @@ def main():
         val_loader = DataLoader(harmonization_dataset(args, "val"), batch_size=1, shuffle=False)
         train_harmnet(args, train_loader, val_loader, device, harmnet_path)
     if args.hynet or args.both:
-        # with --init_weights the full checkpoint (HarmNet included) is loaded afterwards, so a pre-trained HarmNet file is not needed
-        model = build_model(args.model, args, device, harmnet_path if needs_harmnet(args.model) and not args.init_weights else None)
-        train_set = segmentation_dataset(args, "train", train=True)
-        train_loader = training_loader(args, train_set)
+        model = build_model(args.model, args, device, harmnet_path if needs_harmnet(args.model) else None)
+        train_loader = training_loader(args, segmentation_dataset(args, "train", train=True))
         val_loader = DataLoader(segmentation_dataset(args, "val"), batch_size=1, shuffle=False)
-        consistency = None
-        if args.consist > 0 or args.consist_harm > 0:
-            target_paths = segmentation_dataset(args, "test").image_paths if args.consist_target else []
-            consistency = make_consistency(args, train_set.image_paths, target_paths)
-        train_segmentation(args, model, train_loader, val_loader, device, model_path, consistency)
+        train_segmentation(args, model, train_loader, val_loader, device, model_path)
 
 if __name__ == "__main__":
     main()

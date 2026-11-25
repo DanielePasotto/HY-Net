@@ -23,17 +23,14 @@ cu128 = ["torch>=2.4", "torchvision"]
 
 [project.scripts]
 hynet-train = "hynet.cli.train:main"
-hynet-test = "hynet.cli.test:main"
 hynet-predict = "hynet.cli.predict:main"
 hynet-evaluate = "hynet.cli.evaluate:main"
 hynet-make-folds = "hynet.cli.make_folds:main"
 hynet-compare = "hynet.cli.compare:main"
 hynet-benchmark = "hynet.cli.benchmark:main"
-hynet-prepare-external = "hynet.cli.prepare_external:main"
 hynet-make-targets = "hynet.cli.make_targets:main"
 hynet-prepare-pool = "hynet.cli.prepare_pool:main"
 hynet-robustness = "hynet.cli.robustness:main"
-hynet-postproc = "hynet.cli.postproc:main"
 
 [dependency-groups]
 dev = ["pytest"]
