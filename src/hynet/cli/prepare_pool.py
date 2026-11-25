@@ -2,7 +2,7 @@
 
 Everything is written to <out_root>/train/{images,masks} (a single container folder: the folds files decide which image is used for what), as
 IMG_<domain>-<id>_Interval<n>.<ext> / MASK_... with domain `ours`, `orgaseg` or `organoid`. Our images are copied unchanged; the external ones become
-8-bit grayscale PNG and binary masks (instance masks are binarized), at their native size, as in hynet-prepare-external.
+8-bit grayscale PNG and binary masks (instance masks are binarized), at their native size.
 
   ours       DatasetOrganoidsSplitted_70_15_15 (train / val / test folders)
   orgaseg    OrgaSegment "OrganoidBasic" (train / val / eval folders)
@@ -10,19 +10,37 @@ IMG_<domain>-<id>_Interval<n>.<ext> / MASK_... with domain `ours`, `orgaseg` or 
 
 folds/lodo_<domain>.json tests on <domain> and trains on the training images of the other two (validation: their validation images):
 the test images of `ours` and `orgaseg` are all of their images (none is used for training in that direction), those of `organoid` are its official testing images.
+folds/pool_all.json is for the model released for use: it trains on the training images of all three datasets and tests on their official test images.
 """
 import argparse
 import csv
 import json
 import os
 import shutil
+import numpy as np
 from PIL import Image
 from hynet import data
-from hynet.cli.prepare_external import to_gray, to_mask
 from hynet.evaluation import well_id
 from hynet.folds import check_folds
 
 DOMAINS = ("ours", "orgaseg", "organoid")
+
+
+def to_gray(path):
+    """Any image as 8-bit grayscale (channel mean, min-max stretched)."""
+    a = np.array(Image.open(path))
+    if a.ndim == 3:
+        a = a[..., :3].mean(axis=2)
+    a = a.astype(np.float32)
+    lo, hi = a.min(), a.max()
+    return np.round(255 * (a - lo) / (hi - lo) if hi > lo else np.zeros_like(a)).astype(np.uint8)
+
+def to_mask(path):
+    """Any (instance) mask as a binary 0/255 mask."""
+    a = np.array(Image.open(path))
+    if a.ndim == 3:
+        a = a[..., 0]
+    return (a > 0).astype(np.uint8) * 255
 
 def ours_items(root):
     for split in data.SPLITS:
@@ -62,6 +80,13 @@ def lodo_folds(items):
         docs[held_out] = doc
     return docs
 
+def pool_folds(items):
+    """Folds document of the model released for use: trains and validates on the training and validation images of all the datasets and tests on their official test images."""
+    wells = {r: sorted({well_id(i["name"]) for i in items if i["role"] == r}) for r in ("train", "val", "test")}
+    doc = {"k": 1, "seed": 0, "grouped_by": "well", "holdout": True, "folds": [wells]}
+    check_folds(doc)
+    return doc
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ours", default="data/DatasetOrganoidsSplitted_70_15_15")
@@ -96,6 +121,10 @@ def main():
             json.dump(doc, f, indent=2)
         fold = doc["folds"][0]
         print(f"lodo_{held_out}: train {len(fold['train'])} wells, val {len(fold['val'])}, test {len(fold['test'])}")
+    doc = pool_folds(items)
+    with open(os.path.join(args.folds_dir, "pool_all.json"), "w") as f:
+        json.dump(doc, f, indent=2)
+    print("pool_all: " + ", ".join(f"{k} {len(v)} wells" for k, v in doc["folds"][0].items()))
     print(f"{len(items)} images written to {args.out_root}")
 
 if __name__ == "__main__":
