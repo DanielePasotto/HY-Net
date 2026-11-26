@@ -66,6 +66,7 @@ uv run --extra cu128 hynet-make-targets --input_root data/pool --output_root dat
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Wr scripts/lodo.sh ours hynet_res              # HY-Net
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Wr_s43 SEED=43 scripts/lodo.sh ours hynet_res  # second seed
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Wy scripts/lodo.sh ours ynet_raw               # Y-Net without HarmNet
+SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Wg scripts/lodo.sh ours hynet_res_nogate       # concatenation instead of attention and gates
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Uw scripts/lodo.sh ours unet                   # U-Net (wide)
 SCALE=2 AUGMENT=true ROOT=outputs/lodo_Ua scripts/lodo.sh ours unet                                      # U-Net (default ranges)
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide MICRO=4 ROOT=outputs/lodo_Kw scripts/lodo.sh ours campeod        # CAMPEOD (12 GB GPU: MICRO=4)
@@ -81,7 +82,7 @@ FOLDS_FILE=folds/lodo_ours.json DATASET=data/pool FOLDS=0 scripts/robustness.sh 
 
 # 5. summaries: Dice per recipe and seed, paired per-well differences and robustness with bootstrap CIs over wells
 python scripts/summarize_plan.py --seeds 42 43 44
-python scripts/compare_wells.py Wr-Uw Wr-Kw Wr-Nn --seeds 42 43 44
+python scripts/compare_wells.py Wr-Uw Wr-Kw Wr-Nn Wr-Wy Wr-Wg --seeds 42 43 44
 python scripts/summarize_robustness.py --root outputs/robustness --reference campeod_Kw \
     --model hynet_res_Wr=hynet_res:lodo_Wr_ours,lodo_Wr_ours_s43,lodo_Wr_ours_s44 --model campeod_Kw=campeod:lodo_Kw_ours,lodo_Kw_ours_s43,lodo_Kw_ours_s44
 

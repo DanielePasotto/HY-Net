@@ -19,6 +19,7 @@ GROUPS = {
     "Mp": ("macpnet", "MACPnet, augment", "Ua"),
     "Wy": ("ynet_raw", "Y-Net without HarmNet, wide augment", "Ya"),
     "Wr": ("hynet_res", "HY-Net, wide augment", "Wy"),
+    "Wg": ("hynet_res_nogate", "HY-Net concat, no attention/gates, wide", "Wr"),
     "Wh": ("hynet_fast", "HY-Net half-resolution HarmNet, wide", "Wr"),
     "Uw": ("unet", "U-Net, wide augment", None),
     "Kw": ("campeod", "CAMPEOD, wide augment", "Ka"),

@@ -5,6 +5,7 @@ from .hynet import HYNet
 MODELS = {
     "hynet_res": ("HY-Net (final model): residual HarmNet (identity at start, no classical-pipeline target) + Asymmetric Gated Y-Net, trained end to end", False),
     "hynet_fast": ("hynet_res whose residual HarmNet works at half resolution (about 1/4 of its operations)", False),
+    "hynet_res_nogate": ("hynet_res with plain concatenation of the two streams, no attention and no gating (ablation)", False),
     "hynet": ("HY-Net, pre-trained variant: HarmNet pre-trained on the classical-pipeline target, then fine-tuned end to end", True),
     "hynet_nogate": ("pre-trained variant with plain concatenation of the two streams, no attention and no gating", True),
     "ynet_raw": ("dual-stream Y-Net fed with the raw image in both streams (no HarmNet)", False),
@@ -30,6 +31,8 @@ def build_model(name, args, device, harmnet_weights_path=None):
         return HYNet(*shapes, device, None, residual_harm=True)
     if name == "hynet_fast":
         return HYNet(*shapes, device, None, residual_harm=True, harm_down=2)
+    if name == "hynet_res_nogate":
+        return HYNet(*shapes, device, None, residual_harm=True, use_attention=False, fusion="concat")
     if name == "hynet":
         return HYNet(*shapes, device, harmnet_weights_path)
     if name == "hynet_nogate":

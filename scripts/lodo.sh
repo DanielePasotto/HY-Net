@@ -24,7 +24,7 @@ AUGMENT_RANGE=${AUGMENT_RANGE:-default}
 SCALE=${SCALE:-0}
 # the dual-stream models do not fit a batch of 4 in 12 GB at the very peak: same batch, accumulated over MICRO chunks
 case $MODEL in
-  hynet|hynet_res|hynet_fast|hynet_nogate) MICRO=${MICRO:-2};;
+  hynet|hynet_res|hynet_fast|hynet_res_nogate|hynet_nogate) MICRO=${MICRO:-2};;
   *) MICRO=${MICRO:-1};;
 esac
 FOLDS=${FOLDS_FILE:-folds/lodo_$DOMAIN.json}
