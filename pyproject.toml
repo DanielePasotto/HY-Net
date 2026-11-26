@@ -6,10 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
-    "opencv-python-headless",
     "pillow",
-    "pytorch-msssim",
-    "scikit-image",
     "scipy",
     "tqdm",
 ]
@@ -25,10 +22,7 @@ cu128 = ["torch>=2.4", "torchvision"]
 hynet-train = "hynet.cli.train:main"
 hynet-predict = "hynet.cli.predict:main"
 hynet-evaluate = "hynet.cli.evaluate:main"
-hynet-make-folds = "hynet.cli.make_folds:main"
-hynet-compare = "hynet.cli.compare:main"
 hynet-benchmark = "hynet.cli.benchmark:main"
-hynet-make-targets = "hynet.cli.make_targets:main"
 hynet-prepare-pool = "hynet.cli.prepare_pool:main"
 hynet-robustness = "hynet.cli.robustness:main"
 

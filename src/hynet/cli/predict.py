@@ -5,7 +5,7 @@ from hynet import data
 from timeit import default_timer as timer
 from hynet.engine import seed_everything
 from hynet.models.factory import build_model
-from hynet.splits import weights_paths
+from hynet.splits import weights_path as run_weights_path
 from torch.utils.data import DataLoader
 from hynet.config import get_args
 from tqdm import tqdm
@@ -21,7 +21,7 @@ def main():
     dataset = data.OrganoidDataset(args.dataset_path, transform=data.IMG_TRANSFORM, with_masks=False)
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-    _, weights_path = weights_paths(args)
+    weights_path = run_weights_path(args)
     model = build_model(args.model, args, device)
     model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
     print("##### Model loaded correctly #####")

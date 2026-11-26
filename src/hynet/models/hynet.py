@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
-from .harmnet import HarmNet, ResidualHarmNet
+from .harmnet import ResidualHarmNet
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -144,23 +144,16 @@ class AsymmetricGatedYNet(nn.Module):
 class HYNet(nn.Module):
     """HarmNet followed by the Asymmetric Gated Y-Net (the harmonized and the raw image feed the two streams).
 
-    `harmonize=False` skips HarmNet and gives the raw image to both streams (Y-Net without HarmNet). `residual_harm=True` uses ResidualHarmNet
-    (identity at initialization, trained only through the segmentation loss: the final model); otherwise HarmNet is loaded from `weights_path`
-    (pre-trained variant; None leaves it randomly initialized). `harm_down` > 1 makes the residual HarmNet work on a reduced image (faster inference).
+    HarmNet is a ResidualHarmNet (identity at initialization, trained only through the segmentation loss). `harmonize=False` skips it and gives
+    the raw image to both streams (Y-Net without HarmNet). `harm_down` > 1 makes HarmNet work on a reduced image (faster inference).
     `use_attention`/`fusion` are forwarded to the Y-Net.
     """
-    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device, weights_path: str,
-                 harmonize: bool = True, use_attention: bool = True, fusion: str = "gated", residual_harm: bool = False, harm_down: int = 1) -> None:
+    def __init__(self, input_shape: int, hidden_units: int, output_shape: int, device: torch.device,
+                 harmonize: bool = True, use_attention: bool = True, fusion: str = "gated", harm_down: int = 1) -> None:
         super(HYNet, self).__init__()
         self.harmonize = harmonize
         if harmonize:
-            if residual_harm:
-                harmnet = ResidualHarmNet(input_shape, hidden_units, input_shape, down=harm_down)
-            else:
-                harmnet = HarmNet(input_shape, hidden_units, input_shape)
-            self.harmnet = harmnet.to(device)
-            if weights_path is not None:
-                self.harmnet.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
+            self.harmnet = ResidualHarmNet(input_shape, hidden_units, input_shape, down=harm_down).to(device)
         self.ynet = AsymmetricGatedYNet(input_shape, output_shape, use_attention=use_attention, fusion=fusion).to(device)
 
     def forward_proc(self, x):

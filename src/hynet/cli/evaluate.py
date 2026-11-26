@@ -13,7 +13,7 @@ from hynet.config import get_args, str2bool
 from hynet.engine import seed_everything
 from hynet.models.factory import build_model
 from hynet.scoring import score_predictions
-from hynet.splits import segmentation_dataset, weights_paths, run_tag
+from hynet.splits import segmentation_dataset, weights_path as run_weights_path, run_tag
 
 def add_arguments(parser):
     group = parser.add_argument_group("evaluation")
@@ -50,7 +50,7 @@ def main():
     args = get_args(add_arguments)
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
     seed_everything(args.seed)
-    _, weights_path = weights_paths(args)
+    weights_path = run_weights_path(args)
     weights_path = args.weights_path or weights_path
 
     dataset = segmentation_dataset(args, "test" if args.folds_file else args.split)

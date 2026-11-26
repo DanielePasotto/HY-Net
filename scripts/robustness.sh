@@ -2,18 +2,17 @@
 # Robustness of trained models to photometric perturbations of the test images (python -m hynet.cli.robustness); resumable.
 #
 #   scripts/robustness.sh <group> <runs_root> <models...>
-#   e.g. scripts/robustness.sh cv_s42 outputs/runs hynet ynet_raw unet hynet_nogate
-#        FOLDS_FILE=folds/lodo_ours.json DATASET=data/pool FOLDS=0 scripts/robustness.sh lodo_ours_s42 outputs/lodo/ours/runs hynet ynet_raw unet
+#   e.g. FOLDS_FILE=folds/lodo_ours.json scripts/robustness.sh lodo_Wr_ours outputs/lodo_Wr/ours/runs hynet_res
 #
 # Results: outputs/robustness/<group>/<model>/fold<k>/per_well.csv ; compare with scripts/summarize_robustness.py.
-# Environment: FOLDS_FILE=folds/k5_seed42.json, DATASET=data/DatasetOrganoidsSplitted_70_15_15, FOLDS="0 1 2 3 4", OUT=outputs/robustness, WORKERS=3, SETTINGS (default: clean and the whole sweep; e.g. "clean noise:0.05")
+# Environment: FOLDS_FILE (required, e.g. folds/lodo_ours.json), DATASET=data/pool, FOLDS=0, OUT=outputs/robustness, WORKERS=3, SETTINGS (default: clean and the whole sweep; e.g. "clean noise:0.05")
 set -euo pipefail
 GROUP=$1
 RUNS=$2
 shift 2
-FOLDS_FILE=${FOLDS_FILE:-folds/k5_seed42.json}
-DATASET=${DATASET:-data/DatasetOrganoidsSplitted_70_15_15}
-FOLDS=${FOLDS:-0 1 2 3 4}
+FOLDS_FILE=${FOLDS_FILE:?set FOLDS_FILE, e.g. folds/lodo_ours.json}
+DATASET=${DATASET:-data/pool}
+FOLDS=${FOLDS:-0}
 OUT=${OUT:-outputs/robustness}
 WORKERS=${WORKERS:-3}
 export PYTHONUNBUFFERED=1

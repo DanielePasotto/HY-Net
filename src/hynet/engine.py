@@ -2,8 +2,6 @@ import os
 import random
 import numpy as np
 import torch
-import torch.nn.functional as F
-from hynet.metrics import calculate_harmonization_metrics
 from tqdm import tqdm
 
 def seed_everything(seed):
@@ -65,11 +63,7 @@ def training(model, loader, criterion, optimizer, device, scaler=None, micro_bat
                 outputs = model(inputs)
             outputs = outputs.float()
 
-            if len(chunk) == 3:
-                targets = chunk[2].to(device)
-                loss, _ = criterion(outputs, targets, masks, inputs)
-            else:
-                loss = criterion(outputs, masks)
+            loss = criterion(outputs, masks)
 
             if amp:
                 scaler.scale(loss * weight).backward()
@@ -87,62 +81,23 @@ def training(model, loader, criterion, optimizer, device, scaler=None, micro_bat
 
     return running_loss / len(loader)
 
-def validation(model, loader, criterion, device, evaluator=None):
+def validation(model, loader, criterion, device, evaluator):
+    """Mean loss and the metrics of `evaluator` (hynet.metrics.SemanticEvaluator) over the loader."""
     model.eval()
-
+    evaluator.reset()
+    segmentation_loss = 0.0
     with torch.no_grad():
-        if evaluator is None:
-            metrics = {
-                'loss': 0.0,
-                'cnr': 0.0,
-                'dice': 0.0,
-                'bg_roughness': 0.0,
-                'ssim': 0.0,
-                'psnr': 0.0
-            }
-            for data in tqdm(loader, desc="Validation"):
-                inputs = data[0].to(device)
-                masks = data[1].to(device)
-                targets = data[2].to(device)
+        for data in tqdm(loader, desc="Validation"):
+            inputs = data[0].to(device)
+            masks = data[1].to(device)
 
-                outputs = model(inputs)
+            outputs = model(inputs)
 
-                loss, ssim_item = criterion(outputs, targets, masks, inputs)
-                metrics['loss'] += loss.item()
+            loss = criterion(outputs, masks)
+            segmentation_loss += loss.item()
 
-                batch_metrics = calculate_harmonization_metrics(outputs, masks)
-                metrics['cnr'] += batch_metrics['cnr']
-                metrics['dice'] += batch_metrics['dice']
-                metrics['bg_roughness'] += batch_metrics['bg_roughness']
-                metrics['ssim'] += (1.0 - ssim_item)
+            probs = torch.sigmoid(outputs)
+            preds = (probs > 0.5).long()
+            evaluator.update(preds.squeeze(1), masks.long().squeeze(1))
 
-                mse = F.mse_loss(outputs * masks, targets * masks)
-                psnr = 10 * torch.log10(1 / (mse + 1e-8))
-                metrics['psnr'] += psnr.item()
-        else:
-            evaluator.reset()
-            segmentation_loss = 0.0
-            for data in tqdm(loader, desc="Validation"):
-                inputs = data[0].to(device)
-                masks = data[1].to(device)
-
-                outputs = model(inputs)
-
-                loss = criterion(outputs, masks)
-                segmentation_loss += loss.item()
-
-                probs = torch.sigmoid(outputs)
-                preds = (probs > 0.5).long()
-                evaluator.update(preds.squeeze(1), masks.long().squeeze(1))
-
-    # Average metrics over batches
-    num_batches = len(loader)
-    if evaluator is None:
-        final_metrics = {k: v / num_batches for k, v in metrics.items()}
-    else:
-        final_metrics = {
-            'loss': segmentation_loss / num_batches,
-            **evaluator.compute()
-        }
-
-    return final_metrics
+    return {'loss': segmentation_loss / len(loader), **evaluator.compute()}

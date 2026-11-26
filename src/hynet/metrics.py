@@ -1,5 +1,4 @@
 import torch
-from skimage.filters import threshold_otsu
 
 class SemanticEvaluator:
     def __init__(self, num_classes, device='cpu'):
@@ -48,45 +47,3 @@ class SemanticEvaluator:
 
     def reset(self):
         self.confusion_matrix.fill_(0)
-
-def calculate_harmonization_metrics(pred, mask):
-    with torch.no_grad():
-        pred_np = pred.squeeze().cpu().numpy()
-        mask_np = mask.squeeze().cpu().numpy()
-
-        try:
-            thresh = threshold_otsu(pred_np)
-            binary_pred = pred_np > thresh
-
-            if binary_pred.sum() > (binary_pred.size / 2):
-                binary_pred = ~binary_pred
-
-            intersection = (binary_pred * mask_np).sum()
-            union = binary_pred.sum() + mask_np.sum()
-            dice = (2. * intersection + 1e-6) / (union + 1e-6)
-
-        except Exception:
-            dice = 0.0
-
-        pred_flat = pred.flatten()
-        mask_flat = mask.flatten()
-
-        cell_pixels = pred_flat[mask_flat > 0.5]
-        bg_pixels = pred_flat[mask_flat <= 0.5]
-
-        if len(cell_pixels) == 0 or len(bg_pixels) == 0:
-            return {'cnr': 0.0, 'bg_roughness': 0.0, 'dice': dice}
-
-        mu_cell = torch.mean(cell_pixels)
-        mu_bg = torch.mean(bg_pixels)
-        std_bg = torch.std(bg_pixels)
-
-        bg_roughness = std_bg.item()
-
-        cnr = torch.abs(mu_cell - mu_bg) / (std_bg + 1e-6)
-
-    return {
-        'cnr': cnr.item(),
-        'bg_roughness': bg_roughness,
-        'dice': dice
-    }

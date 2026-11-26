@@ -11,7 +11,6 @@ import os
 # tag -> (model, label, reference tag of its family). "a" = default photometric augmentation, "w" = wide; all with the random zoom (SCALE=2).
 GROUPS = {
     "Ya": ("ynet_raw", "Y-Net without HarmNet, augment", None),
-    "Ha": ("hynet", "HY-Net pre-trained HarmNet, augment", "Ya"),
     "Ra": ("hynet_res", "HY-Net, augment", "Ya"),
     "Ua": ("unet", "U-Net, augment", "Ya"),
     "Ka": ("campeod", "CAMPEOD, augment", "Ya"),

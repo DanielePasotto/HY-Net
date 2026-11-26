@@ -116,52 +116,8 @@ class OrganoidDataset(Dataset):
                 image, mask = random_scale(image, mask, self.scale_aug)
         return image, mask
 
-class HarmonizationDataset(Dataset):
-    """HarmNet dataset: (raw image, binary organoid mask, harmonization target).
-
-    Read from `root_dir`, where the three sets live in sub-folders paired by file name
-    ('IMG_B11_Interval1.tif' <-> 'MASK_B11_Interval1.tif'). In the released processed dataset the raw images are in
-    `true_images/`, the targets (output of the classical pre-processing pipeline) in `images/` and the masks in `masks/`.
-    Alternatively an explicit list of `samples` [(image_path, mask_path, target_path), ...] can be given.
-    """
-    def __init__(self, root_dir=None, input_folder="true_images", target_folder="images", mask_folder="masks",
-                 transform=None, target_transform=None, samples=None):
-        self.transform = transform
-        self.target_transform = target_transform
-
-        if samples is not None:
-            self.image_paths = [s[0] for s in samples]
-            self.mask_paths = [s[1] for s in samples]
-            self.target_paths = [s[2] for s in samples]
-        else:
-            dirs = [os.path.join(root_dir, f) for f in (input_folder, mask_folder, target_folder)]
-            files = [_list_files(d) for d in dirs]
-            if len(files[0]) == 0:
-                print(f"ATTENTION: No images found in {dirs[0]}")
-            if not (len(files[0]) == len(files[1]) == len(files[2])):
-                raise ValueError("Number of images, targets and masks do not match!")
-            for names in zip(*files):
-                if not (_pair_key(names[0]) == _pair_key(names[1]) == _pair_key(names[2])):
-                    raise ValueError(f"File names do not match: {names}")
-            self.image_paths, self.mask_paths, self.target_paths = ([os.path.join(d, f) for f in fs] for d, fs in zip(dirs, files))
-        self.images = [os.path.basename(p) for p in self.image_paths]
-
-    def __len__(self):
-        return len(self.image_paths)
-
-    def __getitem__(self, idx):
-        image = _load_normalized(self.image_paths[idx])
-        target = _load_normalized(self.target_paths[idx])
-        mask = _load_binary_mask(self.mask_paths[idx])
-        if self.transform:
-            image = self.transform(image)
-            target = self.transform(target)
-        if self.target_transform:
-            mask = self.target_transform(mask)
-        return image, mask, target
-
 # ----------------------------------------------------------------------------------------------------------------
-# Pooling of the train/val/test folders (needed to build cross-validation folds)
+# Pooling of the train/val/test folders (needed to select the wells of a fold)
 # ----------------------------------------------------------------------------------------------------------------
 def pool_segmentation_samples(dataset_path):
     """{key: (image_path, mask_path)} over all the splits of the segmentation dataset."""
@@ -175,17 +131,6 @@ def pool_segmentation_samples(dataset_path):
             if key in pool:
                 raise ValueError(f"Duplicate sample {key} in {dataset_path}")
             pool[key] = (image, mask)
-    return pool
-
-def pool_harmonization_samples(processed_path, input_folder="true_images", target_folder="images", mask_folder="masks"):
-    """{key: (image_path, mask_path, target_path)} over all the splits of the processed dataset."""
-    pool = {}
-    for split in SPLITS:
-        if not os.path.isdir(os.path.join(processed_path, split)):
-            continue
-        ds = HarmonizationDataset(os.path.join(processed_path, split), input_folder, target_folder, mask_folder)
-        for image, mask, target in zip(ds.image_paths, ds.mask_paths, ds.target_paths):
-            pool[sample_key(image)] = (image, mask, target)
     return pool
 
 

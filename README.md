@@ -33,17 +33,16 @@ src/hynet/
 ├── config.py          # command-line options shared by all commands
 ├── data.py            # datasets and transforms (images resized to 480x640)
 ├── engine.py          # training / validation loops, early stopping
-├── losses.py          # Tversky-BCE loss; region-aware composite loss (HarmNet pre-training)
+├── losses.py          # Tversky-BCE loss
 ├── metrics.py         # training-time metrics
 ├── evaluation.py      # per-well foreground, boundary and instance metrics, bootstrap CIs
 ├── folds.py, splits.py  # well-grouped folds and the datasets / weight paths of a run
 ├── scoring.py         # scoring of saved prediction masks
-├── targets.py         # classical pipeline = targets of the pre-trained HarmNet variant
 ├── perturb.py, scale.py # photometric perturbations (robustness sweep, augmentation) and random zoom
 ├── models/            # HarmNet, HY-Net, U-Net / Attention U-Net, wrappers of CAMPEOD and MACPnet, factory (model names)
-└── cli/               # hynet-train, -evaluate, -predict, -robustness, -benchmark, -compare, -make-folds, -make-targets, -prepare-pool
+└── cli/               # hynet-train, -evaluate, -predict, -robustness, -benchmark, -prepare-pool
 scripts/               # lodo.sh, robustness.sh, summaries (summarize_plan, summarize_robustness, compare_wells), HarmNet analyses
-folds/                 # leave-one-dataset-out folds, five-fold CV of our dataset, folds of the released model
+folds/                 # leave-one-dataset-out folds, folds of the released model
 tests/                 # unit tests (pytest)
 ```
 
@@ -53,14 +52,13 @@ Not versioned: `data/` (datasets), `outputs/` (runs and evaluations), `checkpoin
 ## Reproducing the paper
 
 All commands run from the repository root. The models are named as in `src/hynet/models/factory.py`: `hynet_res` (HY-Net), `ynet_raw`
-(Y-Net without HarmNet), `hynet` (pre-trained HarmNet variant), `hynet_nogate` (concatenation instead of attention and gates), `hynet_fast`
+(Y-Net without HarmNet), `hynet_res_nogate` (concatenation instead of attention and gates), `hynet_fast`
 (HarmNet at half resolution), `unet`, `attunet`, `campeod`, `macpnet`. Every run needs its own `ROOT` (one per recipe and seed: `_s43`, `_s44`);
 `scripts/lodo.sh` documents its environment variables and skips a training whose `fold0/DONE` exists.
 
 ```bash
-# 1. data: pooled dataset (ours, OrgaSegment, OrganoID) and folds/lodo_<domain>.json; targets for the pre-trained variant
+# 1. data: pooled dataset (ours, OrgaSegment, OrganoID) and folds/lodo_<domain>.json
 uv run --extra cu128 hynet-prepare-pool                     # see --help for the paths of the original datasets
-uv run --extra cu128 hynet-make-targets --input_root data/pool --output_root data/pool_processed
 
 # 2. leave-one-dataset-out (test domain: ours | orgaseg | organoid), Table "lodo"; "wide" = photometric augmentation with the wide ranges
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Wr scripts/lodo.sh ours hynet_res              # HY-Net
@@ -72,13 +70,12 @@ SCALE=2 AUGMENT=true ROOT=outputs/lodo_Ua scripts/lodo.sh ours unet             
 SCALE=2 AUGMENT=true AUGMENT_RANGE=wide MICRO=4 ROOT=outputs/lodo_Kw scripts/lodo.sh ours campeod        # CAMPEOD (12 GB GPU: MICRO=4)
 SCALE=2 AUGMENT=true ROOT=outputs/lodo_At scripts/lodo.sh ours attunet                                   # likewise macpnet (lodo_Mp), campeod default (lodo_Ka)
 
-# 3. contribution of HarmNet (default ranges): Y-Net without HarmNet, pre-trained variant, residual HarmNet
+# 3. contribution of HarmNet (default ranges): Y-Net without HarmNet, HY-Net
 SCALE=2 AUGMENT=true ROOT=outputs/lodo_Ya scripts/lodo.sh ours ynet_raw
-SCALE=2 AUGMENT=true ROOT=outputs/lodo_Ha scripts/lodo.sh ours hynet
 SCALE=2 AUGMENT=true ROOT=outputs/lodo_Ra scripts/lodo.sh ours hynet_res
 
 # 4. robustness to photometric perturbations (ours and orgaseg) of the trained models
-FOLDS_FILE=folds/lodo_ours.json DATASET=data/pool FOLDS=0 scripts/robustness.sh lodo_Wr_ours outputs/lodo_Wr/ours/runs hynet_res
+FOLDS_FILE=folds/lodo_ours.json scripts/robustness.sh lodo_Wr_ours outputs/lodo_Wr/ours/runs hynet_res
 
 # 5. summaries: Dice per recipe and seed, paired per-well differences and robustness with bootstrap CIs over wells
 python scripts/summarize_plan.py --seeds 42 43 44
@@ -94,7 +91,6 @@ SCALE=2 AUGMENT=true AUGMENT_RANGE=wide ROOT=outputs/lodo_Wh scripts/lodo.sh our
 The other baselines are run with the code in `baselines/` (Slurm scripts in `slurm/`): nnU-Net v2 (`baselines/nnunet/prepare_pool.py`, then
 `nnUNetv2_train` 2D for 100 epochs; robustness with `baselines/nnunet/robustness.py`, results in `outputs/lodo_Nn`), the OrganoID U-Net and released
 model (`baselines/organoid/run.py`, `outputs/lodo_Oi` and `lodo_Zo`) and the released OrgaSegment model (`baselines/orgasegment/zeroshot.py`, `outputs/lodo_Zs`).
-The gate/attention ablation is a five-fold cross-validation of our dataset (`folds/k5_seed42.json`, models `hynet` and `hynet_nogate`, compared with `hynet-compare`).
 `scripts/analyze_residual_harm.py` and `scripts/measure_harm_delta.py` measure what the trained HarmNet does to the image and how much the Y-Net depends on it.
 
 The released model is trained on the training images of all three datasets:

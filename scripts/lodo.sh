@@ -3,8 +3,7 @@
 #
 #   scripts/lodo.sh <test_domain> <model>        e.g. SCALE=2 AUGMENT=true AUGMENT_RANGE=wide scripts/lodo.sh organoid hynet_res
 #
-# Data: hynet-prepare-pool writes data/pool and folds/lodo_<domain>.json; for the pre-trained variant (hynet, hynet_nogate) hynet-make-targets
-# (--input_root data/pool --output_root data/pool_processed) writes the HarmNet targets, and HarmNet is first trained on the two training datasets.
+# Data: hynet-prepare-pool writes data/pool and folds/lodo_<domain>.json.
 # The training samples are drawn with the same probability from each dataset (--domain_balance), SPE samples per epoch.
 # Results: $ROOT/<test_domain>/eval/<model>/fold0 (summary.json, per_well.csv).
 # Environment: EPOCHS=100, SPE=400, ROOT=outputs/lodo, SEED=42 (use a different ROOT for each seed), DATA=data/pool,
@@ -24,25 +23,18 @@ AUGMENT_RANGE=${AUGMENT_RANGE:-default}
 SCALE=${SCALE:-0}
 # the dual-stream models do not fit a batch of 4 in 12 GB at the very peak: same batch, accumulated over MICRO chunks
 case $MODEL in
-  hynet|hynet_res|hynet_fast|hynet_res_nogate|hynet_nogate) MICRO=${MICRO:-2};;
+  hynet_res|hynet_fast|hynet_res_nogate) MICRO=${MICRO:-2};;
   *) MICRO=${MICRO:-1};;
 esac
 FOLDS=${FOLDS_FILE:-folds/lodo_$DOMAIN.json}
 RUNS=$ROOT/$DOMAIN/runs
 EVAL=$ROOT/$DOMAIN/eval
 export PYTHONUNBUFFERED=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-POOL="--folds_file $FOLDS --fold 0 --dataset_path $DATA --processed_dataset_path data/pool_processed --runs_root $RUNS"
+POOL="--folds_file $FOLDS --fold 0 --dataset_path $DATA --runs_root $RUNS"
 TRAIN="$POOL --domain_balance true --samples_per_epoch $SPE --epochs $EPOCHS --amp true --seed $SEED"
 RUN="uv run --no-sync"
 
-mkdir -p "$RUNS/harmnet/fold0" "$RUNS/$MODEL/fold0"
-case $MODEL in
-  hynet|hynet_nogate)
-    if [ ! -f "$RUNS/harmnet/fold0/DONE" ]; then
-      $RUN hynet-train --harmnet true --hynet false $TRAIN >"$RUNS/harmnet/fold0/train.log"
-      touch "$RUNS/harmnet/fold0/DONE"
-    fi;;
-esac
+mkdir -p "$RUNS/$MODEL/fold0"
 if [ ! -f "$RUNS/$MODEL/fold0/DONE" ]; then
   $RUN hynet-train --model $MODEL $TRAIN --micro_batches $MICRO --augment $AUGMENT --augment_range $AUGMENT_RANGE --scale_aug $SCALE >"$RUNS/$MODEL/fold0/train.log"
   touch "$RUNS/$MODEL/fold0/DONE"
