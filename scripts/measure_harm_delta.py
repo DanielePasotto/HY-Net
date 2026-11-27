@@ -16,7 +16,7 @@ def r2_affine(x, d):
     res = d - A @ coef
     return 1 - res.var() / max(d.var(), 1e-12), coef
 
-for seed, root in (("42", "lodo_res"), ("43", "lodo_res_s43"), ("44", "lodo_res_s44")):
+for seed, root in (("42", "lodo_Wr"), ("43", "lodo_Wr_s43"), ("44", "lodo_Wr_s44")):
     model = build_model("hynet_res", args, dev)
     model.load_state_dict(torch.load(f"outputs/{root}/organoid/runs/hynet_res/fold0/model.pth", map_location=dev, weights_only=True))
     model.eval()
